@@ -62,7 +62,7 @@ export default function Tutor() {
         </div>
         <div className="mt-4 space-y-3">
           {msgs.map((m, i) => (
-            <div key={i} className={m.role === "user" ? "ml-8 rounded-sm bg-sand p-3" : "mr-8 whitespace-pre-wrap rounded-sm border border-stone-200 p-3"}>
+            <div key={i} className={m.role === "user" ? "ml-8 rounded-sm bg-mist p-3" : "mr-8 whitespace-pre-wrap rounded-sm border border-stone-200 p-3"}>
               {m.content}
             </div>
           ))}
@@ -71,7 +71,7 @@ export default function Tutor() {
         <div className="mt-4 flex gap-2">
           <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask()}
             placeholder="Explain photosynthesis…" className="flex-1 rounded-sm border border-stone-300 p-2" />
-          <button onClick={ask} disabled={busy} className="rounded-sm bg-pine px-4 font-semibold text-white disabled:opacity-50">
+          <button onClick={ask} disabled={busy} className="rounded-sm bg-ink px-4 font-semibold text-white disabled:opacity-50">
             {busy ? "…" : "Ask"}
           </button>
         </div>

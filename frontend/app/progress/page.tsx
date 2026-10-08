@@ -48,7 +48,7 @@ export default function Progress() {
                     <span className="text-stone-600">{Math.round(m.level * 100)}% · {m.attempts} tries</span>
                   </div>
                   <div className="mt-1 h-2 bg-stone-200">
-                    <div className="h-2 bg-pine" style={{ width: `${Math.round(m.level * 100)}%` }} />
+                    <div className="h-2 bg-ink" style={{ width: `${Math.round(m.level * 100)}%` }} />
                   </div>
                 </li>
               ))}
@@ -57,7 +57,7 @@ export default function Progress() {
             <div className="mt-6 flex items-center gap-2">
               <input type="number" value={mins} min={1} onChange={(e) => setMins(Number(e.target.value))}
                 className="w-20 rounded-sm border border-stone-300 p-1.5" />
-              <button onClick={log} className="rounded-sm bg-pine px-4 py-1.5 font-semibold text-white">Log minutes</button>
+              <button onClick={log} className="rounded-sm bg-ink px-4 py-1.5 font-semibold text-white">Log minutes</button>
             </div>
           </div>
         ) : <p className="mt-4 text-stone-600">Loading…</p>}
@@ -69,7 +69,7 @@ export default function Progress() {
             <p className="font-display text-5xl font-bold">{st.streak_days}<span className="text-lg font-normal text-stone-600"> day streak · {st.minutes_today} min today</span></p>
             <ul className="mt-4 space-y-2">
               {st.badges.map((b) => (
-                <li key={b.id} className={`border p-2.5 text-[15px] ${b.earned ? "border-pine bg-sand" : "border-stone-200 text-stone-500"}`}>
+                <li key={b.id} className={`border p-2.5 text-[15px] ${b.earned ? "border-ink bg-mist" : "border-stone-200 text-stone-500"}`}>
                   <span className="font-semibold">{b.earned ? "★" : "☆"} {b.id}</span> — {b.label}
                 </li>
               ))}

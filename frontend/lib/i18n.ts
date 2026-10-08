@@ -5,9 +5,13 @@ export type Lang = "en" | "sl";
 
 const dict = {
   en: {
-    tagline: "Your notes in, exam confidence out.",
-    hero: "Study from your own material, with a tutor that never sleeps.",
-    start: "Upload your first material",
+    sticker: "Free forever · Open source",
+    heroA: "Your notes.",
+    heroB: "Your A.",
+    sub: "Upload your class material and get a study plan, a personal tutor, quizzes, mock exams, and podcasts. No card, no catch.",
+    start: "Upload your notes",
+    ask: "Ask the tutor",
+    tryit: "Try it right now — ask anything:",
     nav_materials: "Materials",
     nav_tutor: "Tutor",
     nav_practice: "Practice",
@@ -18,9 +22,13 @@ const dict = {
     nav_playground: "Playground",
   },
   sl: {
-    tagline: "Tvoji zapiski noter, samozavest na izpitu ven.",
-    hero: "Uči se iz svojega gradiva, s tutorjem, ki nikoli ne spi.",
-    start: "Naloži prvo gradivo",
+    sticker: "Vedno zastonj · Odprta koda",
+    heroA: "Tvoji zapiski.",
+    heroB: "Tvoja petica.",
+    sub: "Naloži svoje gradivo in dobiš učni načrt, osebnega tutorja, kvize, poskusne teste in podkaste. Brez kartice, brez zank.",
+    start: "Naloži zapiske",
+    ask: "Vprašaj tutorja",
+    tryit: "Preizkusi takoj — vprašaj karkoli:",
     nav_materials: "Gradivo",
     nav_tutor: "Tutor",
     nav_practice: "Vaja",

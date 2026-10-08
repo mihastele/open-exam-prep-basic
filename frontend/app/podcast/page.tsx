@@ -33,7 +33,7 @@ export default function Podcast() {
       <div className="mt-3 flex gap-2">
         <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Topic"
           className="max-w-sm flex-1 rounded-sm border border-stone-300 p-2" />
-        <button onClick={gen} className="rounded-sm bg-pine px-4 font-semibold text-white">Generate</button>
+        <button onClick={gen} className="rounded-sm bg-ink px-4 font-semibold text-white">Generate</button>
         {segs.length > 0 && !playing && <button onClick={play} className="rounded-sm border border-ink px-4 font-semibold">Play</button>}
         {playing && <button onClick={() => { stopSpeaking(); setPlaying(false); }} className="rounded-sm border border-ink px-4 font-semibold">Stop</button>}
       </div>
@@ -42,7 +42,7 @@ export default function Podcast() {
       <div className="mt-3 max-w-2xl space-y-2">
         {segs.map((s, i) => (
           <p key={i} className="text-[15px] leading-relaxed">
-            <strong className={s.speaker === "ADA" ? "text-pine" : "text-ochre"}>{s.speaker}:</strong> {s.line}
+            <strong className={`mr-1 rounded-full px-2 py-0.5 text-xs font-black ${s.speaker === "ADA" ? "bg-ink text-volt" : "bg-volt text-ink"}`}>{s.speaker}</strong> {s.line}
           </p>
         ))}
       </div>

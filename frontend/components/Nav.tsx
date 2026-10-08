@@ -29,9 +29,9 @@ export default function Nav() {
     window.dispatchEvent(new Event("oep-lang"));
   };
   return (
-    <header className="border-b-2 border-ink">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-2 px-5 py-3">
-        <Link href="/" className="font-display text-xl font-bold tracking-tight">
+    <header className="bg-ink text-white">
+      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-5 gap-y-2 px-5 py-3">
+        <Link href="/" className="font-display text-xl font-black tracking-tight text-volt">
           openExamPrep
         </Link>
         <nav className="flex flex-wrap gap-x-4 gap-y-1 text-[15px]">
@@ -41,8 +41,8 @@ export default function Nav() {
               href={l.href}
               className={
                 path === l.href
-                  ? "font-semibold text-pine underline underline-offset-4"
-                  : "text-stone-700 hover:text-pine"
+                  ? "font-bold text-volt underline decoration-volt underline-offset-4"
+                  : "text-stone-300 hover:text-white"
               }
             >
               {t(lang, l.key)}
@@ -51,12 +51,13 @@ export default function Nav() {
         </nav>
         <button
           onClick={flip}
-          className="ml-auto rounded-sm border border-stone-300 px-2 py-0.5 text-sm text-stone-700 hover:border-pine"
+          className="ml-auto rounded-full border border-white/30 px-3 py-0.5 text-sm text-stone-200 hover:border-volt hover:text-volt"
           title="Switch language / Zamenjaj jezik"
         >
           {lang === "en" ? "SL" : "EN"}
         </button>
       </div>
+      <div className="h-1 bg-volt" />
     </header>
   );
 }

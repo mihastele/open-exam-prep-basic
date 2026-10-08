@@ -65,7 +65,7 @@ export default function Exam() {
         <div className="mt-3 flex gap-2">
           <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Topic"
             className="flex-1 rounded-sm border border-stone-300 p-2" />
-          <button onClick={startMock} className="rounded-sm bg-pine px-4 font-semibold text-white">Start</button>
+          <button onClick={startMock} className="rounded-sm bg-ink px-4 font-semibold text-white">Start</button>
         </div>
         {msg && <p className="mt-2 text-sm">{msg}</p>}
         {items.length > 0 && (
@@ -80,7 +80,7 @@ export default function Exam() {
                   <div key={i} className="border border-stone-200 p-3">
                     <p className="font-semibold">{i + 1}. {it.question}</p>
                     {it.options.map((o, j) => (
-                      <label key={j} className="block cursor-pointer px-1 py-0.5 text-[15px] hover:bg-sand">
+                      <label key={j} className="block cursor-pointer px-1 py-0.5 text-[15px] hover:bg-mist">
                         <input type="radio" name={`m${i}`} className="mr-2" checked={answers[k] === j}
                           onChange={() => setAnswers(answers.map((a, x) => (x === k ? j : a)))} />{o}
                       </label>
@@ -89,7 +89,7 @@ export default function Exam() {
                 );
               })}
             </div>
-            {score === null && <button onClick={submit} className="mt-4 rounded-sm bg-ochre px-4 py-2 font-semibold text-white">Submit before time runs out</button>}
+            {score === null && <button onClick={submit} className="mt-4 rounded-sm bg-coral px-4 py-2 font-semibold text-white">Submit before time runs out</button>}
             {score !== null && items.map((it, i) => <p key={i} className="mt-2 text-sm text-stone-700"><strong>{i + 1}.</strong> {it.model_answer}</p>)}
           </div>
         )}
@@ -102,12 +102,19 @@ export default function Exam() {
           <div className="mt-3 border border-stone-200 p-3">
             <p className="font-semibold">{oralQ}</p>
             <div className="mt-2 flex gap-2">
-              <button onClick={mic} className="rounded-sm bg-sand px-3 py-1 text-sm font-semibold">🎤 answer</button>
-              <button onClick={() => speak(oralQ)} className="rounded-sm bg-sand px-3 py-1 text-sm font-semibold">replay</button>
+              <button onClick={mic} className="flex items-center gap-1.5 rounded-full bg-ink px-3 py-1 text-sm font-semibold text-white">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="2" width="6" height="12" rx="3" />
+                  <path d="M5 10a7 7 0 0 0 14 0" />
+                  <path d="M12 19v3" />
+                </svg>
+                answer by voice
+              </button>
+              <button onClick={() => speak(oralQ)} className="rounded-full border border-stone-300 px-3 py-1 text-sm font-semibold">replay</button>
             </div>
             <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} rows={3}
               className="mt-2 w-full rounded-sm border border-stone-300 p-2" placeholder="Your answer…" />
-            <button onClick={gradeOral} className="mt-2 rounded-sm bg-pine px-4 py-1.5 font-semibold text-white">Grade</button>
+            <button onClick={gradeOral} className="mt-2 rounded-sm bg-ink px-4 py-1.5 font-semibold text-white">Grade</button>
             {oralFb && <p className="mt-2 text-[15px]">{oralFb}</p>}
           </div>
         )}

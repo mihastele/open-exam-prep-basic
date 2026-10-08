@@ -1,24 +1,36 @@
 @import "tailwindcss";
 
 @theme {
-  --font-display: Georgia, "Times New Roman", serif;
+  --font-display: var(--font-nunito), ui-sans-serif, system-ui, sans-serif;
   --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --color-ink: #1a2e28;
-  --color-pine: #166b5d;
-  --color-pine-dark: #0e4a3f;
-  --color-ochre: #b45309;
-  --color-paper: #ffffff;
-  --color-sand: #f3efe7;
+  --color-ink: #16180f;
+  --color-volt: #d7f542;
+  --color-coral: #ff5a36;
+  --color-mist: #f1f3e4;
 }
 
 body {
   font-family: var(--font-body);
   color: var(--color-ink);
-  background: var(--color-paper);
+  background: #ffffff;
 }
 
-.font-display {
-  font-family: var(--font-display);
+::selection {
+  background: var(--color-volt);
+  color: var(--color-ink);
+}
+
+@keyframes oep-ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-ticker {
+  animation: oep-ticker 26s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

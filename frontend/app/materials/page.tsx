@@ -29,7 +29,7 @@ export default function Materials() {
     <div className="pt-8">
       <h1 className="font-display text-3xl font-bold">Study materials</h1>
       <p className="mt-2 text-stone-700">PDF, PPTX, TXT, Markdown, or images. Everything is chunked and embedded locally.</p>
-      <label className="mt-5 block max-w-md cursor-pointer rounded-sm border-2 border-dashed border-stone-300 p-6 text-center hover:border-pine">
+      <label className="mt-5 block max-w-md cursor-pointer rounded-sm border-2 border-dashed border-stone-300 p-6 text-center hover:border-ink">
         Drop a file here or click to browse
         <input type="file" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
       </label>

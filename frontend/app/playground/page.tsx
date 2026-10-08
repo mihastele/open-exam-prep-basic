@@ -20,7 +20,7 @@ function FunctionPlot() {
     ctx.clearRect(0, 0, W, H);
     ctx.strokeStyle = "#d6d3d1";
     ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
-    ctx.strokeStyle = "#166b5d";
+    ctx.strokeStyle = "#16180f";
     ctx.lineWidth = 2;
     ctx.beginPath();
     for (let px = 0; px <= W; px++) {
@@ -67,7 +67,7 @@ export default function Playground() {
             <div className="mt-3 flex gap-2">
               <input value={ans} onChange={(e) => setAns(e.target.value)} placeholder="Your answer"
                 className="flex-1 rounded-sm border border-stone-300 p-2" />
-              <button onClick={solve} className="rounded-sm bg-pine px-4 font-semibold text-white">Check</button>
+              <button onClick={solve} className="rounded-sm bg-ink px-4 font-semibold text-white">Check</button>
             </div>
             {verdict && <p className="mt-2 text-[15px]">{verdict}</p>}
           </div>

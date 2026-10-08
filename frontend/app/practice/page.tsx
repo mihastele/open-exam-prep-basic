@@ -44,7 +44,7 @@ export default function Practice() {
       <div className="mt-3 flex gap-2">
         <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Topic, e.g. quadratic equations"
           className="max-w-sm flex-1 rounded-sm border border-stone-300 p-2" />
-        <button onClick={quiz} className="rounded-sm bg-pine px-4 font-semibold text-white">Quiz me</button>
+        <button onClick={quiz} className="rounded-sm bg-ink px-4 font-semibold text-white">Quiz me</button>
         <button onClick={flashcards} className="rounded-sm border border-ink px-4 font-semibold">Flashcards</button>
       </div>
       {msg && <p className="mt-3 text-sm">{msg}</p>}
@@ -56,7 +56,7 @@ export default function Practice() {
               <p className="font-semibold">{i + 1}. {it.question}</p>
               <div className="mt-2 grid gap-1">
                 {it.options.map((o, j) => (
-                  <label key={j} className={`cursor-pointer rounded-sm px-2 py-1 text-[15px] ${answers[i] === j ? "bg-sand font-semibold" : "hover:bg-sand"} ${result ? (j === it.answer_index ? "outline outline-2 outline-pine" : answers[i] === j ? "outline outline-2 outline-red-700" : "") : ""}`}>
+                  <label key={j} className={`cursor-pointer rounded-sm px-2 py-1 text-[15px] ${answers[i] === j ? "bg-mist font-semibold" : "hover:bg-mist"} ${result ? (j === it.answer_index ? "outline outline-2 outline-ink" : answers[i] === j ? "outline outline-2 outline-red-700" : "") : ""}`}>
                     <input type="radio" name={`q${i}`} className="mr-2" checked={answers[i] === j}
                       onChange={() => setAnswers(answers.map((a, k) => (k === i ? j : a)))} />{o}
                   </label>
@@ -66,7 +66,7 @@ export default function Practice() {
             </div>
           ))}
           {!result ? (
-            <button onClick={grade} className="rounded-sm bg-ochre px-4 py-2 font-semibold text-white">Grade it</button>
+            <button onClick={grade} className="rounded-sm bg-coral px-4 py-2 font-semibold text-white">Grade it</button>
           ) : (
             <p className="text-lg font-semibold">Score: {Math.round(result.score * 100)}% — mastery updated.</p>
           )}
@@ -79,7 +79,7 @@ export default function Practice() {
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {cards.map((c, i) => (
               <button key={i} onClick={() => setFlip(flip === i ? null : i)}
-                className="min-h-24 rounded-sm border border-stone-200 p-4 text-left hover:border-pine">
+                className="min-h-24 rounded-sm border border-stone-200 p-4 text-left hover:border-ink">
                 <span className="text-sm font-semibold text-stone-500">{flip === i ? "Back" : "Front"}</span>
                 <p className="mt-1">{flip === i ? c.back : c.front}</p>
               </button>
