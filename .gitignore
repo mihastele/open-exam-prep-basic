@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+.next/
+out/
+*.log
+
+# Env / secrets (never commit real keys)
+.env
+.env.local
+backend/.env
+
+# Uploads + local data (user study material stays local)
+backend/uploads/
+backend/data/
+*.sqlite3
+*.db
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
