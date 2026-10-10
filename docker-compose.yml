@@ -1,56 +1,123 @@
+# openExamPrep, self-hosted: one public port, one command.
+#
+#   docker compose up --build        ->  http://localhost:8080  (set APP_PORT to change)
+#
+# The shape deliberately mirrors the Vercel deployment: a single entry point that sends
+# /api/* to FastAPI and everything else to Next.js, so the browser only ever talks to one
+# origin and the model provider's key stays in the backend. Two things differ from Vercel,
+# both on purpose:
+#
+#   * tesseract is installed, so images and photographed questions can actually be read;
+#   * the database is a real Postgres with a volume, so material outlives a cold start.
+#
+# Ports other than APP_PORT are deliberately not published: everything is reached through
+# the proxy.
+
+name: openexamprep
+
 services:
   db:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: oep
-      POSTGRES_PASSWORD: oep
-      POSTGRES_DB: oep
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-oep}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-oep}
+      POSTGRES_DB: ${POSTGRES_DB:-oep}
     volumes:
-      - oep_pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U oep"]
+      # The backend waits on this, so a slow first initdb cannot look like a broken app.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-oep} -d ${POSTGRES_DB:-oep}"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
+    restart: unless-stopped
 
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg://oep:oep@db:5432/oep
-      MODEL_PROVIDER: ${MODEL_PROVIDER:-ollama}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-oep}:${POSTGRES_PASSWORD:-oep}@db:5432/${POSTGRES_DB:-oep}
+
+      # A local Ollama is unreachable from inside a container, where "localhost" means the
+      # container itself. So this stack defaults to the gateway, unlike the bare-metal
+      # default which follows the host. Point MODEL_PROVIDER at ollama and set
+      # OLLAMA_BASE_URL=http://host.docker.internal:11434/v1 to use one on the host.
+      MODEL_PROVIDER: ${MODEL_PROVIDER:-hosted}
+      HOSTED_BASE_URL: ${HOSTED_BASE_URL:-https://ai-gateway.vercel.sh/v1}
+      HOSTED_API_KEY: ${HOSTED_API_KEY:-}
+      HOSTED_MODEL: ${HOSTED_MODEL:-alibaba/qwen3.7-flash}
+      HOSTED_EMBED_MODEL: ${HOSTED_EMBED_MODEL:-openai/text-embedding-3-small}
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434/v1}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
-      HOSTED_BASE_URL: ${HOSTED_BASE_URL:-}
-      HOSTED_API_KEY: ${HOSTED_API_KEY:-}
-      HOSTED_MODEL: ${HOSTED_MODEL:-}
-      HOSTED_EMBED_MODEL: ${HOSTED_EMBED_MODEL:-}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-nomic-embed-text}
       EMBED_BASE_URL: ${EMBED_BASE_URL:-}
       EMBED_API_KEY: ${EMBED_API_KEY:-}
       EMBED_MODEL_NAME: ${EMBED_MODEL_NAME:-}
       EMBED_DIM: ${EMBED_DIM:-}
-      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       LANGFUSE_HOST: ${LANGFUSE_HOST:-https://cloud.langfuse.com}
-      FRONTEND_URL: http://localhost:3000
-    ports:
-      - "8000:8000"
+
+      # CORS only matters if something talks to the API directly; through the proxy the app
+      # is same-origin, so this is belt and braces.
+      FRONTEND_URL: http://localhost:${APP_PORT:-8080}
+
+      # Sessions: an anonymous cookie owns the uploads, and material is deleted this many
+      # days after upload (0 = keep it until deleted by hand).
+      DOC_RETENTION_DAYS: ${DOC_RETENTION_DAYS:-7}
+      RETENTION_SWEEP_MINUTES: ${RETENTION_SWEEP_MINUTES:-60}
+      # Set true only once HTTPS is in front: a Secure cookie is never sent over HTTP.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - ./backend/uploads:/app/uploads
+    healthcheck:
+      # `curl` is not in the slim image; python is.
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3).status == 200 else 1)\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
 
   frontend:
     build: ./frontend
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-    ports:
-      - "3000:3000"
+      # Empty on purpose: the browser calls this same origin and the proxy routes /api to
+      # the backend. Next inlines NEXT_PUBLIC_* at build time, so this must be empty when the
+      # image is built — setting it here at runtime would have no effect anyway.
+      NEXT_PUBLIC_API_URL: ""
     depends_on:
       - backend
+    restart: unless-stopped
+
+  # The single entry point. Same two routing rules as vercel.json, no TLS because there is
+  # no domain to certify — see deploy/Caddyfile.
+  proxy:
+    image: caddy:2-alpine
+    ports:
+      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
+    environment:
+      PORT: ${APP_PORT:-8080}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
 
 volumes:
-  oep_pgdata:
+  # Postgres data. `docker compose down -v` removes both volumes and every session's
+  # material with them.
+  pgdata:
+  # Raw uploaded files. The parsed text and chunks live in pgdata, so losing this loses
+  # convenience copies, not your material.
+  uploads:

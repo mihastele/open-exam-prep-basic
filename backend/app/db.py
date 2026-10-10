@@ -239,6 +239,28 @@ def get_session():
         db.close()
 
 
+def _ensure_columns() -> None:
+    """Add columns that arrived after a database was first created.
+
+    `create_all` only creates missing *tables*, so an existing Docker volume would keep
+    its old `documents` table and every ownership query would fail against a column
+    that is not there. Deliberately small and specific — this project has no migration
+    framework, and adding one for a single column would be a worse trade.
+    """
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    if "documents" not in inspector.get_table_names():
+        return
+    if "owner_id" in {c["name"] for c in inspector.get_columns("documents")}:
+        return
+    with engine.begin() as conn:
+        conn.exec_driver_sql("ALTER TABLE documents ADD COLUMN owner_id VARCHAR(64)")
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS ix_documents_owner_id ON documents (owner_id)"
+        )
+
+
 def init_db() -> None:
     """Create the extension and tables. Raises on failure — callers decide.
 
@@ -252,3 +274,4 @@ def init_db() -> None:
         with engine.begin() as conn:
             conn.exec_driver_sql("CREATE EXTENSION IF NOT EXISTS vector")
     Base.metadata.create_all(bind=engine)
+    _ensure_columns()

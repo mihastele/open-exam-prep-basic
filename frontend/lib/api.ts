@@ -74,4 +74,37 @@ export type Health = {
   tracing: boolean;
   /** Whether traces will really be sent (keys present AND client loaded). */
   tracing_status?: { enabled: boolean; available: boolean; detail: string };
+  /** How many days uploaded material is kept before automatic deletion. 0 = forever. */
+  retention_days?: number;
 };
+
+/** An uploaded document, as this browser's session sees it. */
+export type Doc = {
+  id: number;
+  title: string;
+  source_type: string;
+  chunks: number;
+  created_at?: string | null;
+  /** When the server will delete it. null = retention is switched off. */
+  expires_at?: string | null;
+  /** False when the text was stored without vectors — keyword search only. */
+  embedded?: boolean;
+};
+
+/**
+ * The caller's own session.
+ *
+ * There is no account behind this: an anonymous cookie owns the material. `fingerprint`
+ * is a short prefix of the session id — enough to tell two browsers apart on screen,
+ * useless to anyone else.
+ */
+export type SessionInfo = {
+  fingerprint: string;
+  retention_days: number;
+  documents: number;
+  chunks: number;
+  next_expiry?: string | null;
+  cookie_secure: boolean;
+};
+
+export const getSession = () => api<SessionInfo>("/api/session");

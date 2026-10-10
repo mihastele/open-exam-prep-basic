@@ -20,6 +20,7 @@ from .. import services_llm as llm
 from .. import services_podcast as podcast
 from ..db import get_session
 from ..models import Document
+from ..session import resolve_session
 
 router = APIRouter(prefix="/api/podcast", tags=["podcast"])
 
@@ -37,20 +38,28 @@ class SectionIn(BaseModel):
     document_ids: list[int] | None = None
 
 
-def _require_target(db: Session, topic: str, document_ids: list[int] | None) -> None:
+def _require_target(
+    db: Session, topic: str, document_ids: list[int] | None, owner: str
+) -> None:
     """A topic, an explicit document pick, or material in the library — else nothing to talk about."""
     if topic or document_ids:
         return
-    if not db.scalar(select(func.count()).select_from(Document)):
+    if not db.scalar(
+        select(func.count()).select_from(Document).where(Document.owner_id == owner)
+    ):
         raise HTTPException(400, "Upload some material or give a topic first.")
 
 
 @router.post("/outline")
-def make_outline(body: EpisodeIn, db: Session = Depends(get_session)):
-    _require_target(db, body.topic, body.document_ids)
+def make_outline(
+    body: EpisodeIn,
+    owner: str = Depends(resolve_session),
+    db: Session = Depends(get_session),
+):
+    _require_target(db, body.topic, body.document_ids, owner)
     try:
         return podcast.plan(db, topic=body.topic, minutes=body.minutes,
-                            document_ids=body.document_ids)
+                            document_ids=body.document_ids, owner_id=owner)
     except llm.LLMUnavailable as e:
         raise HTTPException(503, str(e))
     except podcast.PodcastUnavailable as e:
@@ -60,7 +69,11 @@ def make_outline(body: EpisodeIn, db: Session = Depends(get_session)):
 
 
 @router.post("/section")
-def make_section(body: SectionIn, db: Session = Depends(get_session)):
+def make_section(
+    body: SectionIn,
+    owner: str = Depends(resolve_session),
+    db: Session = Depends(get_session),
+):
     sections = body.outline.get("sections") or []
     if not sections:
         raise HTTPException(400, "The outline has no sections.")
@@ -70,7 +83,8 @@ def make_section(body: SectionIn, db: Session = Depends(get_session)):
         )
     try:
         return podcast.render_section(db, outline=body.outline, index=body.index,
-                                      minutes=body.minutes, document_ids=body.document_ids)
+                                      minutes=body.minutes, document_ids=body.document_ids,
+                                      owner_id=owner)
     except llm.LLMUnavailable as e:
         raise HTTPException(503, str(e))
     except podcast.PodcastUnavailable as e:
@@ -80,11 +94,15 @@ def make_section(body: SectionIn, db: Session = Depends(get_session)):
 
 
 @router.post("/script")
-def make_script(body: EpisodeIn, db: Session = Depends(get_session)):
-    _require_target(db, body.topic, body.document_ids)
+def make_script(
+    body: EpisodeIn,
+    owner: str = Depends(resolve_session),
+    db: Session = Depends(get_session),
+):
+    _require_target(db, body.topic, body.document_ids, owner)
     try:
         return podcast.build_episode(db, topic=body.topic, minutes=body.minutes,
-                                     document_ids=body.document_ids)
+                                     document_ids=body.document_ids, owner_id=owner)
     except llm.LLMUnavailable as e:
         raise HTTPException(503, str(e))
     except podcast.PodcastUnavailable as e:

@@ -101,6 +101,18 @@ class Settings(BaseSettings):
     podcast_max_sections: int = 16
     podcast_workers: int = 4
 
+    # Uploaded material belongs to the browser that uploaded it and is deleted
+    # automatically, so a shared deployment does not become a pile of everyone's
+    # notes. 0 = keep it forever.
+    doc_retention_days: int = 7
+    # How often the background sweep looks for expired material. Only useful where a
+    # process lives long enough to own a timer (Docker); on serverless the same sweep
+    # runs per request for the session making it.
+    retention_sweep_minutes: int = 60
+    # Sessions are an anonymous cookie with no account behind them. Set true once you
+    # serve over HTTPS; over plain HTTP a Secure cookie would never be sent.
+    session_cookie_secure: bool = False
+
     @property
     def is_serverless(self) -> bool:
         """True on Vercel (and similar) where the filesystem is read-only."""

@@ -1,6 +1,7 @@
 """Chunking + retrieval. pgvector in Postgres, cosine-in-Python on SQLite,
 keyword overlap when embeddings are unavailable (honestly flagged)."""
 
+import logging
 import math
 import re
 
@@ -8,8 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import services_llm as llm
+from .config import get_settings
 from .db import has_pgvector, is_postgres
-from .models import Chunk
+from .models import Chunk, Document
+
+logger = logging.getLogger(__name__)
 
 TOKEN = re.compile(r"[a-zA-ZÀ-ž0-9]+")
 
@@ -41,6 +45,33 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return num / den if den else 0.0
 
 
+def fit_to_column(vecs: list[list[float]] | None) -> list[list[float]] | None:
+    """Return vectors the column can actually hold, or None to store the text without them.
+
+    A provider whose output width does not match the pgvector column — a swapped embed
+    model on an existing database, say — must not cost the user their upload. Storing the
+    text and skipping the vectors degrades retrieval to keyword search, which is the same
+    trade this code already makes when embeddings are unavailable entirely, and it is far
+    better than a 500 on a file that was otherwise fine.
+    """
+    if not vecs:
+        return None
+    if not (is_postgres() and has_pgvector()):
+        return vecs  # a JSON column takes any width
+
+    expected = get_settings().resolved_embed_dim
+    widths = {len(v) for v in vecs}
+    if widths != {expected}:
+        logger.warning(
+            "embeddings are %s-dimensional but the column expects %d — storing the text "
+            "without vectors, so search falls back to keywords",
+            "/".join(str(w) for w in sorted(widths)),
+            expected,
+        )
+        return None
+    return vecs
+
+
 def _keyword_rank(query: str, chunks: list[Chunk], k: int) -> list[Chunk]:
     q = set(TOKEN.findall(query.lower()))
     scored = sorted(
@@ -52,10 +83,19 @@ def _keyword_rank(query: str, chunks: list[Chunk], k: int) -> list[Chunk]:
 
 
 def retrieve(
-    db: Session, query: str, k: int = 6, document_ids: list[int] | None = None
+    db: Session,
+    query: str,
+    k: int = 6,
+    document_ids: list[int] | None = None,
+    owner_id: str | None = None,
 ) -> tuple[list[Chunk], bool]:
-    """Returns (chunks, degraded). degraded=True means keyword fallback."""
-    stmt = select(Chunk).order_by(Chunk.id)
+    """Returns (chunks, degraded). degraded=True means keyword fallback.
+
+    `owner_id` restricts the search to documents that session uploaded. It is required
+    in spirit if not in signature: passing None searches everyone's material, which is
+    exactly the leak sessions exist to prevent. Every caller in `routers/` passes it.
+    """
+    stmt = _owned(select(Chunk).order_by(Chunk.id), owner_id)
     if document_ids:
         stmt = stmt.where(Chunk.document_id.in_(document_ids))
     chunks = list(db.scalars(stmt))
@@ -66,7 +106,7 @@ def retrieve(
     except llm.LLMUnavailable:
         return _keyword_rank(query, chunks, k), True
     if is_postgres() and has_pgvector():
-        stmt = select(Chunk)
+        stmt = _owned(select(Chunk), owner_id)
         if document_ids:
             stmt = stmt.where(Chunk.document_id.in_(document_ids))
         stmt = (
@@ -82,6 +122,19 @@ def retrieve(
         reverse=True,
     )
     return (scored[:k] or _keyword_rank(query, chunks, k), not bool(scored[:k]))
+
+
+def _owned(stmt, owner_id: str | None):
+    """Scope a chunk query to one session's documents.
+
+    A subquery rather than a join so the same helper works on both branches below
+    without disturbing their ordering.
+    """
+    if owner_id is None:
+        return stmt
+    return stmt.where(
+        Chunk.document_id.in_(select(Document.id).where(Document.owner_id == owner_id))
+    )
 
 
 LEVELS = {

@@ -7,12 +7,18 @@ from .. import services_llm as llm
 from .. import services_rag as rag
 from ..db import get_session
 from ..services_parse import ocr_image
+from ..session import resolve_session
 
 router = APIRouter(prefix="/api/solve", tags=["solve"])
 
 
 @router.post("/photo")
-async def solve_photo(file: UploadFile, level: str = "secondary", db: Session = Depends(get_session)):
+async def solve_photo(
+    file: UploadFile,
+    level: str = "secondary",
+    owner: str = Depends(resolve_session),
+    db: Session = Depends(get_session),
+):
     data = await file.read()
     if len(data) > 10 * 1024 * 1024:
         raise HTTPException(413, "Image too large (10 MB max).")
@@ -20,7 +26,7 @@ async def solve_photo(file: UploadFile, level: str = "secondary", db: Session = 
         text = ocr_image(data)
     except RuntimeError as e:
         raise HTTPException(501, str(e))
-    chunks, _ = rag.retrieve(db, text, k=4)
+    chunks, _ = rag.retrieve(db, text, k=4, owner_id=owner)
     context = "\n---\n".join(c.text for c in chunks)
     style = rag.LEVELS.get(level, rag.LEVELS["secondary"])
     prompt = (

@@ -37,6 +37,14 @@ optional: the app runs with neither.
   or downloaded as Markdown, plain text, Word, PDF, HTML, JSON — plus CSV for
   quizzes and flashcards, which imports straight into Anki or a spreadsheet. All
   of it is done in the browser: no extra service, no server round trip.
+- **Your material is yours alone** — uploaded documents belong to the browser that
+  uploaded them, so another visitor to the same deployment sees an empty library and
+  cannot read, cite or delete yours. Material is also deleted automatically 7 days
+  after upload, whether or not anyone remembers to.
+- **Runs anywhere, including where serverless cannot** — `docker compose up` gives you
+  the same shape as the Vercel deployment plus the two things a serverless host cannot:
+  a real Postgres that keeps material, and tesseract, so images and photographed
+  questions are actually readable. See [docs/DOCKER.md](docs/DOCKER.md).
 
 See [docs/ASTRA_PARITY.md](docs/ASTRA_PARITY.md) for the feature-by-feature
 mapping to the commercial product this project replaces.
@@ -149,6 +157,15 @@ what you need — the file documents each one in place.
 | `UPLOAD_DIR` | Where the original file is kept. Rarely worth setting: the parsed text and chunks live in the database, so the raw copy is a convenience, not the source of truth. |
 | `PODCAST_SECTION_MINUTES` / `PODCAST_MAX_SECTIONS` / `PODCAST_WORKERS` | How an episode's length target is divided into sections, how many sections an episode may have, and how many are written at once. Workers are real provider calls — keep the number modest on a serverless time budget. |
 | `STT_PROVIDER` / `TTS_PROVIDER` | Default `none` uses the browser's Web Speech API: free and no audio leaves the device. Set a provider only for consistent voices across browsers or server-side transcription. |
+| `DOC_RETENTION_DAYS` | How long an upload survives before automatic deletion. Default 7; `0` keeps it until deleted by hand. |
+| `SESSION_COOKIE_SECURE` | Leave `false` over plain HTTP — a Secure cookie is never sent, which would hand every request a brand new session. Set `true` behind HTTPS. |
+| `APP_PORT` | Docker Compose only: the single port the whole app is published on. Default `8080`. |
+
+`MODEL_PROVIDER` deserves one note for Compose: it defaults to `hosted` there even
+though the backend's own default follows the host. A container cannot reach an Ollama
+running on your machine — inside the container, `localhost` is the container — so
+defaulting to one would be a stack that never works. To use a host-side Ollama, set
+`MODEL_PROVIDER=ollama` and `OLLAMA_BASE_URL=http://host.docker.internal:11434/v1`.
 
 ## Deploy free on Vercel
 
@@ -162,6 +179,23 @@ token.
 See [docs/VERCEL.md](docs/VERCEL.md) for the full walkthrough, the env vars to set,
 the gateway setup, and the free-tier limits (4.5 MB request bodies, ephemeral disk,
 no OCR).
+
+## Self-host with Docker (one command, one port)
+
+```bash
+cp .env.example .env
+docker compose up --build          # then open http://localhost:8080
+```
+
+Same single-entry-point shape as the Vercel deployment — `/api/*` to FastAPI,
+everything else to Next.js, one public port (set `APP_PORT`) — with two things a
+serverless host cannot offer: **tesseract**, so images and photographed questions are
+readable, and a **real Postgres in a volume**, so material outlives a restart. Uploads
+are owned by the browser session that made them and expire on their own; the Materials
+page shows the fingerprint, the window and a countdown per file.
+
+Full details, including what is *not* isolated, backups, and troubleshooting:
+[docs/DOCKER.md](docs/DOCKER.md).
 
 
 ## Langfuse (optional, recommended)
@@ -196,7 +230,8 @@ pgvector is still used — material persists and retrieval ranks in Python.
 ```
 backend/    FastAPI API: ingest, RAG tutor, practice, plans, exams, podcast, progress
 frontend/   Next.js app: study workspace UI (EN + SL scaffold, more welcome)
-docs/       Architecture, parity map, self-hosting, Vercel deployment
+deploy/     Caddyfile — the single-entry-point routing, same rules as vercel.json
+docs/       Architecture, parity map, self-hosting, Vercel + Docker deployment
 ```
 
 ## Contributing

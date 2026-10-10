@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_session
 from ..models import Document, Mastery, StudyPlan
+from ..session import resolve_session
 
 router = APIRouter(prefix="/api/plan", tags=["plan"])
 
@@ -49,7 +50,11 @@ def build_schedule(
 
 
 @router.post("")
-def create_plan(body: PlanIn, db: Session = Depends(get_session)):
+def create_plan(
+    body: PlanIn,
+    owner: str = Depends(resolve_session),
+    db: Session = Depends(get_session),
+):
     try:
         exam = date.fromisoformat(body.exam_date)
     except ValueError:
@@ -58,7 +63,12 @@ def create_plan(body: PlanIn, db: Session = Depends(get_session)):
         raise HTTPException(400, "exam_date must be in the future.")
     topics = [t.strip() for t in body.topics if t.strip()]
     if not topics and body.document_ids:
-        docs = db.scalars(select(Document).where(Document.id.in_(body.document_ids)))
+        # Owner-scoped: someone else's document id simply contributes no topic.
+        docs = db.scalars(
+            select(Document).where(
+                Document.id.in_(body.document_ids), Document.owner_id == owner
+            )
+        )
         topics = [d.title for d in docs]
     if not topics:
         raise HTTPException(400, "Give topics or pick documents to plan from.")

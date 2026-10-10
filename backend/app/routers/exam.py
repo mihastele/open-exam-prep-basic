@@ -10,6 +10,7 @@ from .. import services_rag as rag
 from ..db import get_session
 from ..models import Attempt
 from ..services_parse import parse_json_response
+from ..session import resolve_session
 
 router = APIRouter(prefix="/api/exam", tags=["exam"])
 
@@ -37,14 +38,22 @@ class OralGradeIn(BaseModel):
     transcript: str
 
 
-def _material(db: Session, topic: str, document_ids: list[int] | None) -> str:
-    chunks, _ = rag.retrieve(db, topic or "exam key concepts", k=10, document_ids=document_ids)
+def _material(
+    db: Session, topic: str, document_ids: list[int] | None, owner: str
+) -> str:
+    chunks, _ = rag.retrieve(
+        db, topic or "exam key concepts", k=10, document_ids=document_ids, owner_id=owner
+    )
     return "\n---\n".join(c.text for c in chunks)
 
 
 @router.post("/mock")
-def make_mock(body: MockIn, db: Session = Depends(get_session)):
-    material = _material(db, body.topic, body.document_ids)
+def make_mock(
+    body: MockIn,
+    owner: str = Depends(resolve_session),
+    db: Session = Depends(get_session),
+):
+    material = _material(db, body.topic, body.document_ids, owner)
     prompt = (
         f"Write a {body.n}-question mock exam on '{body.topic or 'the material'}' "
         f"for a {body.minutes}-minute sitting. Mix multiple choice and short answer, "
@@ -82,8 +91,12 @@ def submit_mock(attempt_id: int, body: SubmitIn, db: Session = Depends(get_sessi
 
 
 @router.post("/oral/next")
-def oral_next(body: OralIn, db: Session = Depends(get_session)):
-    material = _material(db, body.topic, body.document_ids)
+def oral_next(
+    body: OralIn,
+    owner: str = Depends(resolve_session),
+    db: Session = Depends(get_session),
+):
+    material = _material(db, body.topic, body.document_ids, owner)
     asked = [h.get("question", "") for h in body.history]
     prompt = (
         f"You run an oral exam on '{body.topic or 'the material'}'. Ask ONE probing "

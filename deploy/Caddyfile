@@ -1,0 +1,24 @@
+# One public entry point, using the same two rules as vercel.json.
+#
+# Plain HTTP on purpose: there is no domain here to get a certificate for. Set the port
+# with APP_PORT in .env — nothing else in this file needs touching.
+
+{
+	admin off
+	auto_https off
+}
+
+:{$PORT} {
+	encode zstd gzip
+
+	# /api/* goes to FastAPI and keeps its prefix — Vercel Services does not strip the
+	# matched path either, so the routes are mounted at their real paths in both places.
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# Everything else is the Next.js app.
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, upload } from "../../lib/api";
+import { api, getSession, upload, type Doc, type SessionInfo } from "../../lib/api";
 import {
   Button,
   Callout,
@@ -13,8 +13,6 @@ import {
   UploadIcon,
 } from "../../components/ui";
 
-type Doc = { id: number; title: string; source_type: string; chunks: number };
-
 /** A small type badge so a long file list is skimmable. */
 function kindOf(title: string) {
   const ext = (title.split(".").pop() ?? "").toLowerCase();
@@ -25,15 +23,37 @@ function kindOf(title: string) {
   return { label: "TXT", tone: "bg-mist text-ink" };
 }
 
+/**
+ * "in 5 days" for a server timestamp.
+ *
+ * The server sends an explicit UTC offset, so this cannot drift by the viewer's
+ * timezone — which is why the API returns "2026-10-17T21:30:00+00:00" and not a
+ * bare "2026-10-17T21:30:00".
+ */
+function expiresIn(iso?: string | null) {
+  if (!iso) return null;
+  const ms = new Date(iso).getTime() - Date.now();
+  if (!Number.isFinite(ms)) return null;
+  const days = Math.ceil(ms / 86_400_000);
+  if (days <= 0) return "any moment now";
+  return days === 1 ? "in 1 day" : `in ${days} days`;
+}
+
 export default function Materials() {
   const [docs, setDocs] = useState<Doc[]>([]);
+  const [session, setSession] = useState<SessionInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [loaded, setLoaded] = useState(false);
 
-  const refresh = () =>
-    api<Doc[]>("/api/ingest")
+  const refresh = () => {
+    // The session rides along as a cookie, so this call is also what mints it on a
+    // first visit. Non-fatal if it fails: the list below is the important part.
+    getSession()
+      .then(setSession)
+      .catch(() => setSession(null));
+    return api<Doc[]>("/api/ingest")
       .then((d) => {
         setDocs(d);
         setLoaded(true);
@@ -42,6 +62,7 @@ export default function Materials() {
         setErr(String(e));
         setLoaded(true);
       });
+  };
 
   useEffect(() => {
     refresh();
@@ -53,16 +74,18 @@ export default function Materials() {
     setMsg("");
     try {
       const d = await upload<Doc>("/api/ingest", f);
-      setMsg(`Indexed “${d.title}” — ${d.chunks} chunk${d.chunks === 1 ? "" : "s"} ready to cite.`);
+      setMsg(
+        d.embedded === false
+          ? `Indexed “${d.title}” — ${d.chunks} chunk${d.chunks === 1 ? "" : "s"}, but without vectors, so the tutor will search it by keyword. Check your embedding model.`
+          : `Indexed “${d.title}” — ${d.chunks} chunk${d.chunks === 1 ? "" : "s"} ready to cite.`,
+      );
       refresh();
     } catch (e) {
       const raw = String(e);
-      // Images go through OCR, which needs a system binary serverless hosts lack.
-      setErr(
-        raw.includes("501")
-          ? "That looks like an image, and reading images needs the tesseract binary — not available on this host. Upload a PDF or text file instead."
-          : raw,
-      );
+      // A 501 means this host cannot read images (no tesseract binary). The server
+      // explains that precisely — including that the Docker image does include it — so
+      // show its words instead of guessing at them.
+      setErr(raw.includes("501") ? raw.replace(/^501:\s*/, "") : raw);
     }
     setBusy(false);
   };
@@ -77,7 +100,8 @@ export default function Materials() {
   return (
     <div className="pt-8">
       <PageHeader title="Study materials">
-        PDF, PPTX, images, text or Markdown. Everything is chunked and embedded so the tutor can quote it back to you.
+        PDF, PPTX, images, text or Markdown. Everything is chunked and embedded so the tutor can quote it back to
+        you — and it stays yours: this library belongs to this browser, not to everyone using the deployment.
       </PageHeader>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_16rem]">
@@ -136,6 +160,7 @@ export default function Materials() {
                         <span className="block truncate font-semibold">{d.title}</span>
                         <span className="text-xs text-stone-500">
                           {d.chunks} chunk{d.chunks === 1 ? "" : "s"} · {d.source_type}
+                          {expiresIn(d.expires_at) ? ` · deleted ${expiresIn(d.expires_at)}` : ""}
                         </span>
                       </span>
                       <button
@@ -156,6 +181,29 @@ export default function Materials() {
         </div>
 
         <aside className="space-y-4">
+          {session && (
+            <Card soft className="p-4">
+              <h2 className="font-display text-sm font-extrabold uppercase tracking-wide text-stone-500">
+                Your session
+              </h2>
+              <p className="mt-2.5 text-sm text-stone-700">
+                <strong>Private to this browser</strong>
+                <span className="ml-1 font-mono text-xs text-stone-500">#{session.fingerprint}</span>. Nobody else
+                using this deployment can list, cite or delete these files.
+              </p>
+              <p className="mt-2 text-sm text-stone-700">
+                {session.retention_days > 0 ? (
+                  <>
+                    Deleted automatically <strong>{session.retention_days} days</strong> after upload
+                    {session.next_expiry ? ` — the next one goes ${expiresIn(session.next_expiry)}` : ""}. Delete
+                    anything sooner and it goes immediately.
+                  </>
+                ) : (
+                  <>Retention is switched off, so files stay until you delete them.</>
+                )}
+              </p>
+            </Card>
+          )}
           <Card soft className="p-4">
             <h2 className="font-display text-sm font-extrabold uppercase tracking-wide text-stone-500">
               What works best

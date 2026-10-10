@@ -22,6 +22,10 @@ class Document(Base):
     title: Mapped[str] = mapped_column(String(300))
     source_type: Mapped[str] = mapped_column(String(20), default="upload")
     filename: Mapped[str] = mapped_column(String(300), default="")
+    # The browser session that uploaded it. Empty means nobody's — rows from before
+    # sessions existed are invisible to everyone and get swept up by retention rather
+    # than being handed to the first visitor.
+    owner_id: Mapped[str] = mapped_column(String(64), default="", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

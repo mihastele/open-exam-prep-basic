@@ -10,6 +10,7 @@ from .. import services_rag as rag
 from ..db import get_session
 from ..models import Attempt
 from ..services_parse import parse_json_response
+from ..session import resolve_session
 
 router = APIRouter(prefix="/api/practice", tags=["practice"])
 
@@ -38,16 +39,25 @@ class FlashIn(BaseModel):
     n: int = 10
 
 
-def _material(db: Session, topic: str, document_ids: list[int] | None) -> str:
-    chunks, _ = rag.retrieve(db, topic or "key concepts", k=8, document_ids=document_ids)
+def _material(
+    db: Session, topic: str, document_ids: list[int] | None, owner: str
+) -> str:
+    """Only this session's material, so quizzes cannot be built from someone else's."""
+    chunks, _ = rag.retrieve(
+        db, topic or "key concepts", k=8, document_ids=document_ids, owner_id=owner
+    )
     return "\n---\n".join(c.text for c in chunks)
 
 
 @router.post("/quiz", response_model=QuizOut)
-def make_quiz(body: QuizIn, db: Session = Depends(get_session)):
+def make_quiz(
+    body: QuizIn,
+    owner: str = Depends(resolve_session),
+    db: Session = Depends(get_session),
+):
     if not body.topic and not body.document_ids:
         raise HTTPException(400, "Give a topic or pick at least one document.")
-    material = _material(db, body.topic, body.document_ids)
+    material = _material(db, body.topic, body.document_ids, owner)
     prompt = (
         f"Create a {body.difficulty} {body.n}-question multiple-choice quiz on "
         f"'{body.topic or 'the material'}'. Base it ONLY on the material below; if the "
@@ -84,10 +94,14 @@ def grade_quiz(body: GradeIn, db: Session = Depends(get_session)):
 
 
 @router.post("/flashcards")
-def make_flashcards(body: FlashIn, db: Session = Depends(get_session)):
+def make_flashcards(
+    body: FlashIn,
+    owner: str = Depends(resolve_session),
+    db: Session = Depends(get_session),
+):
     if not body.topic and not body.document_ids:
         raise HTTPException(400, "Give a topic or pick at least one document.")
-    material = _material(db, body.topic, body.document_ids)
+    material = _material(db, body.topic, body.document_ids, owner)
     prompt = (
         f"Create {body.n} flashcards on '{body.topic or 'the material'}' from the "
         "material below (or general knowledge if empty).\n"

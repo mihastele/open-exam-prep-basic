@@ -105,10 +105,19 @@ def _normalize_lines(data) -> list[dict]:
     return lines
 
 
-def plan(db: Session, *, topic: str, minutes: int, document_ids: list[int] | None = None) -> dict:
+def plan(
+    db: Session,
+    *,
+    topic: str,
+    minutes: int,
+    document_ids: list[int] | None = None,
+    owner_id: str | None = None,
+) -> dict:
     """The episode arc: title, blurb and the ordered section plan."""
     wanted = section_count(minutes)
-    overview, _ = rag.retrieve(db, topic or "overview", k=12, document_ids=document_ids)
+    overview, _ = rag.retrieve(
+        db, topic or "overview", k=12, document_ids=document_ids, owner_id=owner_id
+    )
     prompt = (
         f"Plan a two-host study podcast episode of roughly {minutes} minutes about "
         f"'{topic or 'the course material'}'. Hosts: ADA (the teacher) and BEN (the "
@@ -172,6 +181,7 @@ def render_section(
     index: int,
     minutes: int = 15,
     document_ids: list[int] | None = None,
+    owner_id: str | None = None,
 ) -> dict:
     """Write one section of the episode, grounded in its own retrieved chunks."""
     s = get_settings()
@@ -180,7 +190,7 @@ def render_section(
     target_lines = max(int(max(s.podcast_section_minutes, 1) * WORDS_PER_MINUTE / WORDS_PER_LINE), 18)
 
     chunks, _ = rag.retrieve(db, section.get("query") or section["heading"], k=5,
-                             document_ids=document_ids)
+                             document_ids=document_ids, owner_id=owner_id)
     covered = "\n".join(
         f"- {p['heading']}: {p.get('goal') or 'covered'}" for p in sections[:index]
     )
@@ -265,21 +275,29 @@ def assemble(outline: dict, rendered: list[dict | None], failed: list[str]) -> d
     }
 
 
-def _render_with_session(outline: dict, index: int, minutes: int, document_ids) -> dict:
+def _render_with_session(
+    outline: dict, index: int, minutes: int, document_ids, owner_id: str | None
+) -> dict:
     # Each worker owns its session — SQLAlchemy sessions are not thread-safe.
     db = SessionLocal()
     try:
         return render_section(db, outline=outline, index=index, minutes=minutes,
-                             document_ids=document_ids)
+                             document_ids=document_ids, owner_id=owner_id)
     finally:
         db.close()
 
 
 def build_episode(
-    db: Session, *, topic: str, minutes: int, document_ids: list[int] | None = None
+    db: Session,
+    *,
+    topic: str,
+    minutes: int,
+    document_ids: list[int] | None = None,
+    owner_id: str | None = None,
 ) -> dict:
     """Whole episode in one call: plan, then write every section in parallel."""
-    outline = plan(db, topic=topic, minutes=minutes, document_ids=document_ids)
+    outline = plan(db, topic=topic, minutes=minutes, document_ids=document_ids,
+                   owner_id=owner_id)
     sections = outline["sections"]
     rendered: list[dict | None] = [None] * len(sections)
     failed: list[str] = []
@@ -287,7 +305,7 @@ def build_episode(
 
     with futures.ThreadPoolExecutor(max_workers=workers) as pool:
         pending = {
-            pool.submit(_render_with_session, outline, i, minutes, document_ids): i
+            pool.submit(_render_with_session, outline, i, minutes, document_ids, owner_id): i
             for i in range(len(sections))
         }
         for future in futures.as_completed(pending):

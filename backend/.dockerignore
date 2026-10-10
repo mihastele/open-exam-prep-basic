@@ -1,0 +1,15 @@
+# Host build artefacts must not leak into the image: a .next/ built on the host has
+# different paths and platform-specific binaries, and node_modules/ would be reused
+# across platforms.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+uploads/
+tests/
+*.db
+*.sqlite3
+.env
+.env.*

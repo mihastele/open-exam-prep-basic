@@ -29,17 +29,33 @@ def extract_text(filename: str, data: bytes) -> str:
 
 
 def ocr_image(data: bytes) -> str:
-    """OCR a photographed question. Needs system tesseract + pytesseract."""
+    """OCR a photographed question.
+
+    Works where the system `tesseract` binary exists — the bundled Docker image installs
+    it. Where it does not (Vercel, or a bare `pip install`), this raises so the route
+    returns an honest 501 rather than pretending to read the image.
+    """
     try:
         import pytesseract
         from PIL import Image
-    except ImportError:
+    except ImportError as e:
         raise RuntimeError(
             "Image OCR needs `pip install pytesseract pillow` plus the system "
-            "`tesseract` binary — or type the question into the tutor instead."
+            f"`tesseract` binary — or type the question into the tutor instead. ({e})"
         )
-    img = Image.open(io.BytesIO(data))
-    text = pytesseract.image_to_string(img).strip()
+    try:
+        img = Image.open(io.BytesIO(data))
+        img.load()
+    except Exception as e:  # noqa: BLE001 — corrupt/unsupported image is a client error
+        raise ValueError(f"Could not read that image: {e}")
+    try:
+        text = pytesseract.image_to_string(img).strip()
+    except pytesseract.TesseractNotFoundError:
+        raise RuntimeError(
+            "The `tesseract` binary is not installed here, so images cannot be read. "
+            "The bundled Docker image includes it (`docker compose up`); otherwise type "
+            "the question into the tutor instead."
+        )
     if not text:
         raise RuntimeError("No text found in the image — try a sharper photo.")
     return text
