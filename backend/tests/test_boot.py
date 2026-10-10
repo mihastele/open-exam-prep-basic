@@ -44,10 +44,30 @@ print("SCHEMA", json.dumps({
 """
 
 
+# Which backend a booted app will really call — no network, so it stays hermetic.
+PROG_PROVIDER = """
+import json
+from app.config import get_settings
+
+s = get_settings()
+print("PROVIDER", json.dumps({
+    "provider": s.resolved_provider,
+    "base_url": s.chat_base_url,
+    "model": s.chat_model,
+    "embed_model": s.embed_model,
+    "has_key": bool(s.chat_api_key),
+}))
+"""
+
+
 def _boot(
     database_url: str | None, extra: dict | None = None, prog: str = PROG
 ) -> subprocess.CompletedProcess:
-    """Boot the app in a subprocess. `database_url=None` means "not configured"."""
+    """Boot the app in a subprocess. `database_url=None` means "not configured".
+
+    An `extra` value of None *removes* that variable, so a case can test the
+    unset default rather than an explicitly pinned one.
+    """
     env = {k: v for k, v in os.environ.items() if k != "DATABASE_URL"}
     env.update(
         {
@@ -60,7 +80,11 @@ def _boot(
     )
     if database_url is not None:
         env["DATABASE_URL"] = database_url
-    env.update(extra or {})
+    for key, value in (extra or {}).items():
+        if value is None:
+            env.pop(key, None)
+        else:
+            env[key] = value
     return subprocess.run(
         [sys.executable, "-c", prog], env=env, cwd=BACKEND, capture_output=True, text=True
     )
@@ -183,6 +207,60 @@ def test_schema_uses_json_embeddings_without_a_database():
     assert schema["fallback"] is False  # nothing configured: not a fallback, just the default
     assert schema["pgvector"] is False
     assert schema["json_embedding"] is True
+
+
+def test_a_deployment_with_no_provider_set_uses_the_ai_gateway():
+    """Zero-config on a host must mean the gateway — never a localhost model server.
+
+    This is the tutor bug: with the default previously pinned to "ollama", a fresh
+    deployment called localhost:11434 where nothing listens, so the tutor and every
+    other generated feature failed with nothing on screen to explain why.
+    """
+    proc = _boot(
+        None,
+        extra={"MODEL_PROVIDER": None, "HOSTED_API_KEY": "test-key"},
+        prog=PROG_PROVIDER,
+    )
+    output = proc.stdout + proc.stderr
+
+    assert "PROVIDER" in proc.stdout, output[-2000:]
+    cfg = json.loads(proc.stdout.split("PROVIDER ", 1)[1].split("\n", 1)[0])
+
+    assert cfg["provider"] == "hosted"
+    assert cfg["base_url"] == "https://ai-gateway.vercel.sh/v1"
+    assert cfg["model"] == "alibaba/qwen3.7-flash"
+    assert cfg["embed_model"] == "openai/text-embedding-3-small"
+    assert cfg["has_key"] is True
+
+
+def test_no_provider_and_no_key_on_a_host_is_still_the_gateway():
+    """With no key the gateway is still the target; health explains the 401."""
+    proc = _boot(None, extra={"MODEL_PROVIDER": None}, prog=PROG_PROVIDER)
+    output = proc.stdout + proc.stderr
+
+    assert "PROVIDER" in proc.stdout, output[-2000:]
+    cfg = json.loads(proc.stdout.split("PROVIDER ", 1)[1].split("\n", 1)[0])
+
+    assert cfg["provider"] == "hosted"
+    assert cfg["base_url"] == "https://ai-gateway.vercel.sh/v1"
+    assert cfg["has_key"] is False  # honest: not invented, not "Bearer "
+
+
+def test_pinned_local_ollama_on_a_deployment_is_flagged():
+    """The one provider mistake that is otherwise invisible.
+
+    Someone copies an old .env.example or a dashboard variable; everything 503s and
+    nothing says why. Health now names it.
+    """
+    proc = _boot(None)
+    output = proc.stdout + proc.stderr
+
+    assert "RESULT 200" in proc.stdout, output[-2000:]
+    body = json.loads(proc.stdout.split("RESULT ", 1)[1].split("\n", 1)[0][4:])
+
+    assert body["llm"]["provider"] == "ollama"
+    assert body["llm"]["base_url"].startswith("http://127.0.0.1:9")
+    assert "MODEL_PROVIDER" in body["llm"]["warning"]
 
 
 def test_redact_strips_passwords_from_error_text():

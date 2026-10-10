@@ -62,7 +62,25 @@ lose your data for no reason. Only an unreachable one triggers the fallback.
 
 ## Second: a model provider
 
-### Vercel AI Gateway (recommended)
+**You have to do nothing here.** The default when deployed (a host that sets `VERCEL`)
+is the Vercel AI Gateway, and **one client serves every feature** — tutor, quizzes,
+mock exams, study plans, podcasts and embeddings all go through `app/services_llm.py`,
+so the tutor cannot be on a different gateway from the rest.
+
+`MODEL_PROVIDER` is the override, not a requirement:
+
+| Value | Effect |
+|---|---|
+| *(unset)* | Vercel AI Gateway when hosted, local Ollama otherwise |
+| `hosted` | Force the gateway (or whatever `HOSTED_BASE_URL` points at) |
+| `ollama` | Force a local Ollama — **never** useful on Vercel, where nothing listens on localhost |
+
+Leave it set to `ollama` on a deployment and every request fails; `/api/health` now
+flags exactly that case with a `warning`, because the symptom (nothing reachable,
+nothing explaining why) is otherwise miserable to debug. To confirm what is really in
+use, read `llm.base_url` from `/api/health` — it names the endpoint requests go to.
+
+### Vercel AI Gateway (the default)
 
 One base URL and one key serve both chat and embeddings, so there is nothing to
 reconcile across two providers. AI Gateway is available on **all plans**, charges the
@@ -130,7 +148,7 @@ They are shared by every service in a Services project.
 
 | Variable | Value |
 |---|---|
-| `MODEL_PROVIDER` | `hosted` |
+| `MODEL_PROVIDER` | *(unset = auto)* — gateway when hosted, Ollama when local. Set only to force one |
 | `HOSTED_BASE_URL` | `https://ai-gateway.vercel.sh/v1` |
 | `HOSTED_API_KEY` | your AI Gateway key — **never** prefix with `NEXT_PUBLIC_`. Optional on Vercel: falls back to `AI_GATEWAY_API_KEY`, then `VERCEL_OIDC_TOKEN`. |
 | `HOSTED_MODEL` | `alibaba/qwen3.7-flash` |
@@ -214,6 +232,8 @@ Cross-origin is expected here and the backend allows exactly the origin in
 | A **“Nothing is being saved”** banner | either no `DATABASE_URL` at all, or one that did not answer — see *First: a database (optional)*. Uploads vanish on the next cold start, so fix `DATABASE_URL` |
 | `datastore.fallback: true` | the configured database was unreachable at startup, so this instance is on ephemeral SQLite. `datastore.reason` names the cause (wrong host, rejected credentials, paused project) |
 | `datastore.pgvector: false` | connected, but the `vector` extension is unavailable, so retrieval ranks in Python. Material still persists; answers say they came from keyword search |
+| `/api/health` says provider is `ollama` | `MODEL_PROVIDER` is pinned to a local Ollama on a host where nothing listens on `localhost`. Remove it, or set `hosted`, to use the gateway — health carries a `warning` for this case and the widget shows it |
+| Everything unreachable, no reason given | check `llm.base_url` in `/api/health`: it names the endpoint actually being called, so a stale `HOSTED_BASE_URL` is visible rather than guessed at |
 | `FUNCTION_INVOCATION_FAILED` on **every** route | the function died at cold start. Startup no longer raises for a bad database, so redeploy and read `/api/health` → `db_error`; an invalid *setting* (not a blank one) still fails at import, and the traceback is under Deployments → Functions → the runtime log |
 | `status: degraded`, `db: true`, `llm.reachable: false` | wrong `HOSTED_BASE_URL`/`HOSTED_API_KEY`, or out of credits. `/api/health` carries `status_code` (401 = key rejected, 404 = wrong base URL) and the status widget names the reason |
 | `● ready` but chat fails with 404 | `HOSTED_MODEL` is not in the provider's catalogue. Health reports `model_listed: false` when the provider enumerates models |

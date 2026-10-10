@@ -47,7 +47,13 @@ class Settings(BaseSettings):
             }
         return data
 
-    model_provider: str = "ollama"  # "ollama" | "hosted"
+    # "" = auto (see resolved_provider): the Vercel AI Gateway on a hosted
+    # deployment, local Ollama otherwise. Set "hosted" or "ollama" to force one.
+    #
+    # The default used to be "ollama", which meant a fresh Vercel deployment called
+    # localhost:11434 — where nothing listens — and every tutor, quiz, exam and
+    # podcast request failed.
+    model_provider: str = ""
 
     ollama_base_url: str = "http://localhost:11434/v1"
     ollama_model: str = "qwen2.5:7b"
@@ -101,20 +107,34 @@ class Settings(BaseSettings):
         return bool(os.getenv("VERCEL"))
 
     @property
+    def resolved_provider(self) -> str:
+        """Which backend we will actually call: "hosted" or "ollama".
+
+        Empty MODEL_PROVIDER means "auto". On a serverless host that is the Vercel AI
+        Gateway, because a localhost Ollama cannot exist there — one provider serves
+        chat and embeddings, and the key can come from Vercel itself. Locally the
+        default stays Ollama so the offline quickstart keeps working with no keys.
+        An explicit value always wins.
+        """
+        if self.model_provider in ("hosted", "ollama"):
+            return self.model_provider
+        return "hosted" if self.is_serverless else "ollama"
+
+    @property
     def chat_base_url(self) -> str:
-        if self.model_provider == "hosted" and self.hosted_base_url:
+        if self.resolved_provider == "hosted" and self.hosted_base_url:
             return self.hosted_base_url.rstrip("/")
         return self.ollama_base_url.rstrip("/")
 
     @property
     def chat_model(self) -> str:
-        if self.model_provider == "hosted" and self.hosted_base_url:
+        if self.resolved_provider == "hosted" and self.hosted_base_url:
             return self.hosted_model
         return self.ollama_model
 
     @property
     def chat_api_key(self) -> str:
-        if self.model_provider == "hosted":
+        if self.resolved_provider == "hosted":
             # Explicit setting first, then Vercel's conventional variable name,
             # then the OIDC token Vercel injects into deployments — which lets a
             # project call AI Gateway without storing a key at all.
@@ -129,7 +149,7 @@ class Settings(BaseSettings):
     def embed_model(self) -> str:
         if self.embed_model_name:
             return self.embed_model_name
-        if self.model_provider == "hosted":
+        if self.resolved_provider == "hosted":
             return self.hosted_embed_model or self.hosted_model
         return self.ollama_embed_model
 

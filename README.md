@@ -60,6 +60,10 @@ cp ../.env.example ../.env   # defaults work: Ollama local, SQLite fallback
 uv run uvicorn app.main:app --reload --port 8000
 ```
 
+The copied file needs no edits: with `MODEL_PROVIDER` unset the app uses local Ollama
+on your machine, and the Vercel AI Gateway when deployed. To point a *local* run at the
+gateway instead, set `MODEL_PROVIDER=hosted` and a key.
+
 Frontend:
 
 ```bash
@@ -86,12 +90,18 @@ app together (Ollama still runs on your host; point `OLLAMA_BASE_URL` at it).
 
 ## Model switch
 
-One variable in `.env` picks the provider; no code changes:
+The default is the **Vercel AI Gateway**. `MODEL_PROVIDER` overrides it:
 
 | `MODEL_PROVIDER` | Uses | Needs |
 |---|---|---|
-| `ollama` (default) | Local Ollama, OpenAI-compatible `/v1` | `ollama serve` + pulled models |
+| *(unset — default)* | Vercel AI Gateway when deployed on Vercel, local Ollama otherwise | a key on Vercel, nothing locally |
 | `hosted` | Vercel AI Gateway by default; any OpenAI-compatible chat API | `HOSTED_API_KEY` |
+| `ollama` | Local Ollama, OpenAI-compatible `/v1` | `ollama serve` + pulled models |
+
+**One client for every feature.** The tutor, quizzes, mock exams, study plans, podcasts
+and embeddings all call the same `app/services_llm.py`, so there is no way for the tutor
+to end up on a different gateway from the rest of the app. To check what is actually in
+use, read `/api/health` → `llm.base_url`, which names the endpoint requests really go to.
 
 `hosted` defaults to [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) —
 `alibaba/qwen3.7-flash` for chat and `openai/text-embedding-3-small` for embeddings,
@@ -104,6 +114,41 @@ and says so.
 
 If no provider is reachable, `/api/health` reports `degraded` (with the HTTP status
 and reason) and the API returns an explicit 503 instead of fake output.
+
+## Environment variables, and why each one matters
+
+Everything is optional except picking a model provider. Copy `.env.example` and uncomment
+what you need — the file documents each one in place.
+
+**Picking the model**
+
+| Variable | Why it exists |
+|---|---|
+| `MODEL_PROVIDER` | The top-level override. Leave it unset and the app picks the gateway when hosted and Ollama when local, so a deployment never tries to reach a localhost model server. |
+| `HOSTED_BASE_URL` | Which OpenAI-compatible endpoint to call. Defaults to Vercel AI Gateway; change it for OpenRouter, Together, vLLM, LM Studio. |
+| `HOSTED_API_KEY` | The chat key. On Vercel you can leave it empty — `AI_GATEWAY_API_KEY` is picked up, then `VERCEL_OIDC_TOKEN`, so no secret needs storing at all. |
+| `HOSTED_MODEL` | The chat model, `creator/model`. Check `GET /v1/models` on the gateway for the live list rather than trusting a hardcoded name. |
+| `HOSTED_EMBED_MODEL` | The embedding model, used for retrieval over your own material. |
+| `OLLAMA_*` | The offline path: no key, no account, no network. `OLLAMA_EMBED_MODEL` is separate because Ollama Cloud serves chat models only. |
+
+**Retrieval quality**
+
+| Variable | Why it exists |
+|---|---|
+| `EMBED_BASE_URL` / `EMBED_API_KEY` / `EMBED_MODEL_NAME` | A dedicated embedding endpoint. Needed when the chat provider has no embedding models — otherwise retrieval silently degrades to keyword search and finds literal words instead of the passage that means the same thing. |
+| `EMBED_DIM` | The pgvector column width. Inferred from the embed model name so the model and the column cannot drift apart; set it only for an unlisted model. Changing the embed model on an existing database needs a re-ingest — stored vectors cannot be converted. |
+
+**Running it for real**
+
+| Variable | Why it exists |
+|---|---|
+| `DATABASE_URL` | Persistence. With none set, a serverless host keeps material in SQLite inside one instance, which resets on the next cold start. A *configured* database that cannot be reached is ignored rather than fatal, and `/api/health` says which happened. |
+| `LANGFUSE_*` | The only way to see what the model was actually told — prompt, retrieved sources, latency, cost — when an answer looks wrong. |
+| `FRONTEND_URL` | CORS allow-list, needed only in the two-project shape where the frontend is on another origin. |
+| `MAX_UPLOAD_MB` | Upload rejection threshold. Auto: 50 MB local, 4 MB hosted, because Vercel refuses bodies over 4.5 MB before your code runs. |
+| `UPLOAD_DIR` | Where the original file is kept. Rarely worth setting: the parsed text and chunks live in the database, so the raw copy is a convenience, not the source of truth. |
+| `PODCAST_SECTION_MINUTES` / `PODCAST_MAX_SECTIONS` / `PODCAST_WORKERS` | How an episode's length target is divided into sections, how many sections an episode may have, and how many are written at once. Workers are real provider calls — keep the number modest on a serverless time budget. |
+| `STT_PROVIDER` / `TTS_PROVIDER` | Default `none` uses the browser's Web Speech API: free and no audio leaves the device. Set a provider only for consistent voices across browsers or server-side transcription. |
 
 ## Deploy free on Vercel
 

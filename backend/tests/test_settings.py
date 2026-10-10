@@ -100,3 +100,82 @@ def test_real_values_still_win(monkeypatch):
     assert s.resolved_embed_dim == 768
     assert s.max_upload_mb == 12
     assert s.max_upload_bytes == 12 * 1024 * 1024
+
+
+def test_unset_provider_picks_the_gateway_when_hosted(monkeypatch):
+    """A deployment must not try to reach a localhost model server.
+
+    Defaulting MODEL_PROVIDER to "ollama" meant a fresh Vercel deploy called
+    localhost:11434, where nothing listens, so the tutor and every other generated
+    feature failed with nothing on screen to explain why.
+    """
+    monkeypatch.delenv("MODEL_PROVIDER", raising=False)
+    monkeypatch.setenv("VERCEL", "1")
+
+    s = Settings(_env_file=None)
+
+    assert s.resolved_provider == "hosted"
+    assert s.chat_base_url == "https://ai-gateway.vercel.sh/v1"
+    assert s.chat_model == "alibaba/qwen3.7-flash"
+    assert s.embed_model == "openai/text-embedding-3-small"
+    # One gateway serves both, so no separate embedding endpoint is involved.
+    assert s.embed_url == s.chat_base_url
+
+
+def test_unset_provider_stays_local_offline(monkeypatch):
+    """The offline quickstart must keep working with no keys and no account."""
+    monkeypatch.delenv("MODEL_PROVIDER", raising=False)
+    monkeypatch.delenv("VERCEL", raising=False)
+    # conftest pins OLLAMA_BASE_URL to an unroutable host; clear it so this asserts
+    # the *built-in* default rather than the test fixture's.
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+
+    s = Settings(_env_file=None)
+
+    assert s.resolved_provider == "ollama"
+    assert s.chat_base_url == "http://localhost:11434/v1"
+    assert s.chat_model == "qwen2.5:7b"
+
+
+def test_an_explicit_provider_always_wins(monkeypatch):
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("MODEL_PROVIDER", "ollama")
+
+    s = Settings(_env_file=None)
+
+    assert s.resolved_provider == "ollama"
+    assert s.chat_base_url == "http://localhost:11434/v1"
+
+    monkeypatch.setenv("MODEL_PROVIDER", "hosted")
+    s = Settings(_env_file=None)
+    assert s.resolved_provider == "hosted"
+
+
+def test_blank_provider_is_auto_not_a_broken_value(monkeypatch):
+    """`MODEL_PROVIDER=` in a dashboard means "leave it at the default"."""
+    monkeypatch.setenv("MODEL_PROVIDER", "")
+    monkeypatch.setenv("VERCEL", "1")
+
+    s = Settings(_env_file=None)
+
+    assert s.resolved_provider == "hosted"
+
+
+def test_gateway_key_falls_back_to_vercels_own(monkeypatch):
+    """On Vercel no secret needs storing: the platform provides one."""
+    monkeypatch.setenv("MODEL_PROVIDER", "hosted")
+    monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
+    monkeypatch.delenv("VERCEL_OIDC_TOKEN", raising=False)
+
+    s = Settings(_env_file=None)
+    assert s.chat_api_key == ""  # nothing anywhere: honest, not invented
+
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "gw-key")
+    s = Settings(_env_file=None)
+    assert s.chat_api_key == "gw-key"
+
+    # An explicit HOSTED_API_KEY outranks the conventional variable.
+    monkeypatch.setenv("HOSTED_API_KEY", "explicit")
+    s = Settings(_env_file=None)
+    assert s.chat_api_key == "explicit"

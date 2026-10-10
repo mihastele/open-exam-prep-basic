@@ -1,8 +1,10 @@
-"""Single LLM entrypoint. Ollama-local or any hosted OpenAI-compatible API.
+"""Single LLM entrypoint for every feature — tutor, quizzes, exams, plans, podcasts.
 
-Both providers speak the OpenAI dialect, so the switch is just base URL +
-model + key. Every call is Langfuse-traced. When no provider is reachable we
-raise LLMUnavailable so routers return an honest 503 — never fake output.
+Defaults to the Vercel AI Gateway when hosted (one base URL and one key serve chat
+*and* embeddings), and to local Ollama otherwise; see `resolved_provider`. Both
+speak the OpenAI dialect, so the switch is just base URL + model + key. Every call
+is Langfuse-traced. When no provider is reachable we raise LLMUnavailable so
+routers return an honest 503 — never fake output.
 """
 
 import httpx
@@ -29,8 +31,24 @@ def _headers() -> dict:
 
 def provider_status() -> dict:
     s = get_settings()
-    name = "hosted" if (s.model_provider == "hosted" and s.hosted_base_url) else "ollama"
-    status: dict = {"provider": name, "model": s.chat_model, "reachable": False}
+    name = "hosted" if (s.resolved_provider == "hosted" and s.hosted_base_url) else "ollama"
+    status: dict = {
+        "provider": name,
+        "model": s.chat_model,
+        # Which endpoint requests are really going to. Without this, "is it using the
+        # AI Gateway or something local?" is unanswerable from the outside.
+        "base_url": s.chat_base_url,
+        "reachable": False,
+    }
+    if name == "ollama" and s.is_serverless:
+        # Only possible if someone explicitly pinned it — but a stale .env.example or
+        # a copied dashboard variable is exactly how that happens, and the symptom
+        # (everything unreachable, nothing saying why) is miserable to debug.
+        status["warning"] = (
+            "MODEL_PROVIDER is set to a local Ollama on a hosted deployment, where "
+            "nothing listens on localhost. Set MODEL_PROVIDER=hosted — or remove it — "
+            "to use the Vercel AI Gateway."
+        )
     try:
         r = httpx.get(f"{s.chat_base_url}/models", headers=_headers(), timeout=5.0)
         # 401/403 = missing or rejected key, 404 = wrong base URL. Those are

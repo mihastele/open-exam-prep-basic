@@ -57,6 +57,10 @@ export type Health = {
   llm: {
     provider: string;
     model: string;
+    /** The endpoint requests actually go to — proves which gateway is in use. */
+    base_url?: string;
+    /** Set when the provider choice cannot work here (e.g. local Ollama hosted). */
+    warning?: string;
     reachable: boolean;
     /** HTTP status from the provider's /models probe, when it failed. */
     status_code?: number;

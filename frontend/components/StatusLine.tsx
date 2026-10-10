@@ -41,6 +41,14 @@ export default function StatusLine() {
           ? ` (${h.tracing_status.detail})`
           : ""}
       </p>
+      {h.llm.warning && (
+        <p className="mt-2 rounded-sm border-2 border-coral bg-white px-3 py-2 text-sm text-coral">
+          <strong className="font-display">Wrong model provider.</strong> {h.llm.warning}
+        </p>
+      )}
+      {h.llm.base_url && (
+        <p className="mt-1.5 text-xs text-stone-500">Endpoint: {h.llm.base_url}</p>
+      )}
       {h.db_error && (
         <p className="mt-2 rounded-sm border border-coral bg-white px-2.5 py-1.5 text-sm text-coral">
           <strong>Database:</strong> {h.db_error}
