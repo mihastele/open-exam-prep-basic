@@ -44,6 +44,8 @@ export async function upload<T>(path: string, file: File, extra?: Record<string,
 export type Health = {
   status: "ok" | "degraded";
   db: boolean;
+  /** What we are storing in, and whether it survives a restart. */
+  datastore?: { kind: string; persistent: boolean; detail: string };
   llm: {
     provider: string;
     model: string;
@@ -58,4 +60,6 @@ export type Health = {
   /** Why the database is unusable, when it is. Present only on failure. */
   db_error?: string;
   tracing: boolean;
+  /** Whether traces will really be sent (keys present AND client loaded). */
+  tracing_status?: { enabled: boolean; available: boolean; detail: string };
 };

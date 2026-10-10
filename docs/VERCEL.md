@@ -16,18 +16,31 @@ calls `/api/...` on your own backend, and only the backend holds `HOSTED_API_KEY
 
 ---
 
-## First: a database (required on Vercel)
+## First: a database (optional)
 
-Vercel Functions have no persistent disk, so the SQLite dev fallback cannot work there.
-Create a free Postgres with pgvector — [Neon](https://neon.tech) or
-[Supabase](https://supabase.com) both ship the `vector` extension. Copy the
-connection string; use Neon's **pooled** (`-pooler`) host, because each serverless
-invocation opens its own connection.
+**You can skip this entirely.** With no `DATABASE_URL` the app runs on SQLite in the
+temp directory: it boots, uploads, quizzes and tutors all work, and nothing needs a
+database account. The catch is that it is *ephemeral* — the file lives inside one
+function instance, resets on every cold start, and is not shared with concurrent
+instances, so uploaded material disappears. `/api/health` reports this as
+`datastore.persistent: false` and the home-page status widget shows a
+**“Nothing is being saved”** banner, so it can never look like things are kept when
+they are not.
+
+For anything real, attach Postgres. There is a **permanent free tier**:
+
+| | Free | Catch |
+|---|---|---|
+| [Neon](https://neon.tech) | 0.5 GB storage, 100 CU-hours/month, scale-to-zero, 10 branches, no card | compute suspends when the monthly allowance runs out; no time limit. Pre-wired into the Vercel Marketplace, so it injects the connection string for you |
+| [Supabase](https://supabase.com) | 500 MB database, plus auth/storage/realtime | free projects **pause after ~1 week of inactivity** (nothing is lost, but a quiet demo goes dark) |
+
+Both are Postgres and both ship the `vector` extension, so pgvector works out of the
+box. (`Vercel Postgres` is no longer a first-party product — it is provisioned through
+a Marketplace partner, which is Neon or Supabase under the hood.)
 
 Paste the URL exactly as your provider gives it — a plain `postgresql://…` is fine,
-the backend rewrites it to name the psycopg driver. Forgetting this is not fatal, but
-not setting `DATABASE_URL` at all is: there is no writable disk for SQLite to fall
-back to.
+the backend rewrites it to name the psycopg driver. Prefer Neon's **pooled**
+(`-pooler`) host, because each serverless invocation opens its own connection.
 
 The app creates the extension and its tables on first boot, so there is no migration
 step. If it cannot reach the database, it does **not** crash — `/api/health` reports
@@ -108,7 +121,7 @@ They are shared by every service in a Services project.
 | `HOSTED_API_KEY` | your AI Gateway key — **never** prefix with `NEXT_PUBLIC_`. Optional on Vercel: falls back to `AI_GATEWAY_API_KEY`, then `VERCEL_OIDC_TOKEN`. |
 | `HOSTED_MODEL` | `alibaba/qwen3.7-flash` |
 | `HOSTED_EMBED_MODEL` | `openai/text-embedding-3-small` |
-| `DATABASE_URL` | your Neon/Supabase connection string |
+| `DATABASE_URL` | **optional.** Your Neon/Supabase connection string — omit it to run on ephemeral SQLite and lose data on cold starts |
 | `FRONTEND_URL` | your site URL — **Shape B only** (Shape A is same-origin) |
 | `NEXT_PUBLIC_API_URL` | your backend URL — **Shape B only**; omit for Shape A |
 
@@ -117,7 +130,10 @@ serves embeddings too) and `EMBED_DIM` is inferred as **1536** from
 `text-embedding-3-small`.
 
 Optional: `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` to trace
-every call. Leave empty to skip tracing.
+every call. Skip them and tracing is simply off — no account, no keys and no package
+required at runtime; every request behaves identically. `/api/health` distinguishes
+"off" from "configured but the client failed to load", and the status widget prints the
+difference.
 
 Do **not** set `UPLOAD_DIR` or `MAX_UPLOAD_MB`: both auto-detect serverless and pick
 `/tmp/uploads` and a 4 MB cap. Nothing secret ever belongs in a `NEXT_PUBLIC_*`
@@ -181,7 +197,8 @@ Cross-origin is expected here and the backend allows exactly the origin in
 
 | Symptom | Cause |
 |---|---|
-| `FUNCTION_INVOCATION_FAILED` on **every** route | the function died at cold start — in practice almost always the database (unset `DATABASE_URL`, an unreachable host, or no permission to `CREATE EXTENSION vector`). Startup no longer raises for this, so redeploy and read `/api/health` → `db_error` for the exact message; the raw traceback is under Deployments → Functions → the runtime log |
+| A **“Nothing is being saved”** banner | no `DATABASE_URL`, so it is running on ephemeral SQLite — see *First: a database (optional)*. Uploads vanish on the next cold start |
+| `FUNCTION_INVOCATION_FAILED` on **every** route | the function died at cold start. Startup no longer raises for a bad database, so redeploy and read `/api/health` → `db_error`; an invalid *setting* (not a blank one) still fails at import, and the traceback is under Deployments → Functions → the runtime log |
 | `status: degraded`, `db: true`, `llm.reachable: false` | wrong `HOSTED_BASE_URL`/`HOSTED_API_KEY`, or out of credits. `/api/health` carries `status_code` (401 = key rejected, 404 = wrong base URL) and the status widget names the reason |
 | `● ready` but chat fails with 404 | `HOSTED_MODEL` is not in the provider's catalogue. Health reports `model_listed: false` when the provider enumerates models |
 | Answers cite nothing, `degraded: true` on chat | embeddings unreachable — retrieval fell back to keyword search |

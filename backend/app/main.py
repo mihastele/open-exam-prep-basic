@@ -12,6 +12,7 @@ from .config import get_settings
 from .db import SessionLocal, init_db
 from .routers import exam, games, gamification, ingest, podcast, practice, progress, solve, study_plan, tutor
 from .services_llm import provider_status
+from .services_tracing import tracing_status
 
 
 @asynccontextmanager
@@ -48,13 +49,21 @@ def create_app() -> FastAPI:
         except Exception as e:  # noqa: BLE001
             db_ok = False
             db_error = db_error or f"{type(e).__name__}: {e}"[:300]
+        settings = get_settings()
         llm = provider_status()
         status = "ok" if (db_ok and llm["reachable"]) else "degraded"
         body = {
             "status": status,
             "db": db_ok,
+            # What we are storing in and whether it survives. The database is
+            # optional: with none configured this reports an ephemeral SQLite so
+            # the UI can say so rather than pretending material is kept.
+            "datastore": settings.datastore,
             "llm": llm,
-            "tracing": get_settings().tracing_enabled,
+            # Tracing is optional too — "on" only means the keys are present, so
+            # tracing_status also reports whether the client actually loaded.
+            "tracing": settings.tracing_enabled,
+            "tracing_status": tracing_status(),
         }
         if db_error:
             body["db_error"] = db_error

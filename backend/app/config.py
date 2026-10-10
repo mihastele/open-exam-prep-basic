@@ -1,6 +1,7 @@
 """Central settings. One env var (MODEL_PROVIDER) switches the LLM backend."""
 
 import os
+import tempfile
 from functools import lru_cache
 from typing import Any
 
@@ -76,7 +77,10 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = ""
     langfuse_host: str = "https://cloud.langfuse.com"
 
-    database_url: str = "sqlite:///./oep.db"
+    # Empty = auto: a SQLite file on disk locally, and in the system temp dir on a
+    # serverless host (everywhere else there is read-only). Postgres is strongly
+    # recommended in production — see `datastore`, which /api/health reports.
+    database_url: str = ""
     frontend_url: str = "http://localhost:3000"
 
     # Uploads. Empty = "uploads" locally, "/tmp/uploads" on serverless (the
@@ -159,6 +163,45 @@ class Settings(BaseSettings):
     @property
     def tracing_enabled(self) -> bool:
         return bool(self.langfuse_public_key and self.langfuse_secret_key)
+
+    @property
+    def resolved_database_url(self) -> str:
+        """The URL the engine actually uses. An empty DATABASE_URL means 'auto'."""
+        if self.database_url:
+            return self.database_url
+        if self.is_serverless:
+            # tempfile respects TMPDIR and is the one writable place on Vercel.
+            path = os.path.join(tempfile.gettempdir(), "oep.db").replace("\\", "/")
+            return f"sqlite:///{path}"
+        return "sqlite:///./oep.db"
+
+    @property
+    def datastore(self) -> dict:
+        """What we are storing in, and whether it survives. Shown by /api/health."""
+        url = self.resolved_database_url
+        if url.startswith(("postgresql", "postgres")):
+            return {
+                "kind": "postgres",
+                "persistent": True,
+                "detail": "Postgres with pgvector — material and vectors are kept.",
+            }
+        if self.is_serverless:
+            return {
+                "kind": "sqlite-ephemeral",
+                "persistent": False,
+                "detail": (
+                    "No database configured, so this is running on SQLite in the "
+                    "temp directory. It resets on every cold start and is not "
+                    "shared between concurrent instances, so uploaded material "
+                    "disappears. Attach a free Postgres (Neon or Supabase — both "
+                    "have a permanent free tier) to keep it."
+                ),
+            }
+        return {
+            "kind": "sqlite",
+            "persistent": True,
+            "detail": "SQLite file on disk — fine locally, not for production.",
+        }
 
 
 @lru_cache

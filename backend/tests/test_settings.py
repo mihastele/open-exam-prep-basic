@@ -49,6 +49,46 @@ def test_blank_string_var_falls_back_to_its_default(monkeypatch):
     assert s.upload_path in ("uploads", "/tmp/uploads")
 
 
+def test_database_url_is_optional(monkeypatch):
+    """With no DATABASE_URL the app must still resolve a writable store.
+
+    It used to fall back to `./oep.db`, which is read-only on a serverless host,
+    so "no database configured" meant every request failed.
+    """
+    import tempfile
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("VERCEL", "1")
+
+    s = Settings(_env_file=None)
+
+    assert s.resolved_database_url.startswith("sqlite:")
+    assert tempfile.gettempdir().replace("\\", "/") in s.resolved_database_url
+    assert s.datastore["kind"] == "sqlite-ephemeral"
+    assert s.datastore["persistent"] is False
+    assert "Nothing is being saved" not in s.datastore["detail"]  # UI adds that label
+
+
+def test_local_default_stays_a_file_on_disk(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("VERCEL", raising=False)
+
+    s = Settings(_env_file=None)
+
+    assert s.resolved_database_url == "sqlite:///./oep.db"
+    assert s.datastore["kind"] == "sqlite"
+    assert s.datastore["persistent"] is True
+
+
+def test_postgres_reports_a_persistent_store(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@h/oep")
+
+    s = Settings(_env_file=None)
+
+    assert s.datastore["kind"] == "postgres"
+    assert s.datastore["persistent"] is True
+
+
 def test_real_values_still_win(monkeypatch):
     """The blank guard must not neuter actual configuration."""
     monkeypatch.setenv("EMBED_DIM", "768")

@@ -6,7 +6,8 @@ practice, podcasts, and progress tracking. Your material stays yours.
 
 Built with FastAPI, Next.js, Postgres + pgvector, Langfuse observability, and
 open-weights models — local-first via Ollama, with a one-variable switch to any
-hosted OpenAI-compatible endpoint.
+hosted OpenAI-compatible endpoint. The database and the observability are both
+optional: the app runs with neither.
 
 ## What it does
 
@@ -118,7 +119,21 @@ no OCR).
 Set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_HOST` in `.env`
 (cloud or [self-hosted](https://langfuse.com/self-hosting)). Every tutor answer,
 quiz, grade, and plan is traced with prompt, retrieved chunks, latency, and
-cost. Leave them empty to run fully offline.
+cost. Leave them empty to run fully offline — no account, no keys, and nothing sent
+anywhere. `/api/health` tells "off" apart from "configured but the client failed to
+load", so a broken tracing setup is visible rather than silent.
+
+## Database (optional)
+
+Leave `DATABASE_URL` unset and the app runs on SQLite: a file on disk locally, and in
+the temp directory on a serverless host. The serverless version is *ephemeral* — it
+resets on cold start and is not shared between instances — so `/api/health` reports
+`datastore.persistent: false` and the status widget says **“Nothing is being saved”**
+rather than letting your material disappear quietly.
+
+For anything real, attach Postgres. There is a permanent free tier: **Neon**
+(0.5 GB, 100 CU-hours/month, scale-to-zero) or **Supabase** (500 MB, but free projects
+pause after a week idle). Both ship pgvector, so retrieval works out of the box.
 
 ## Project layout
 

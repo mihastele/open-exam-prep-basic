@@ -29,22 +29,43 @@ with TestClient(create_app(), raise_server_exceptions=False) as client:
 """
 
 
-def _boot(database_url: str, extra: dict | None = None) -> subprocess.CompletedProcess:
+def _boot(database_url: str | None, extra: dict | None = None) -> subprocess.CompletedProcess:
+    """Boot the app in a subprocess. `database_url=None` means "not configured"."""
     env = {k: v for k, v in os.environ.items() if k != "DATABASE_URL"}
     env.update(
         {
             "VERCEL": "1",
-            "DATABASE_URL": database_url,
             "MODEL_PROVIDER": "ollama",
             "OLLAMA_BASE_URL": "http://127.0.0.1:9/v1",  # unroutable, no real traffic
             "LANGFUSE_PUBLIC_KEY": "",
             "LANGFUSE_SECRET_KEY": "",
         }
     )
+    if database_url is not None:
+        env["DATABASE_URL"] = database_url
     env.update(extra or {})
     return subprocess.run(
         [sys.executable, "-c", PROG], env=env, cwd=BACKEND, capture_output=True, text=True
     )
+
+
+def test_runs_with_no_database_configured():
+    """The database is optional: no DATABASE_URL must still serve and store.
+
+    On a serverless host this lands on SQLite in the temp dir, which is writable —
+    unlike the `./oep.db` it used to fall back to.
+    """
+    proc = _boot(None)
+    output = proc.stdout + proc.stderr
+
+    assert "RESULT 200" in proc.stdout, output[-2000:]
+    body = json.loads(proc.stdout.split("RESULT ", 1)[1].split("\n", 1)[0][4:])
+    assert body["db"] is True
+    assert "db_error" not in body
+    assert body["datastore"]["kind"] == "sqlite-ephemeral"
+    assert body["datastore"]["persistent"] is False
+    # And a route that touches the database must actually work, not 503.
+    assert "DBROUTE 200" in proc.stdout, output[-2000:]
 
 
 def test_blank_numeric_env_vars_do_not_break_cold_start(tmp_path):

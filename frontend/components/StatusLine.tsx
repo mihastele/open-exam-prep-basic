@@ -28,6 +28,7 @@ export default function StatusLine() {
     : h.llm.model_listed === false
       ? " — but the provider does not list that model"
       : "";
+  const store = h.datastore;
   return (
     <>
       <p className="text-[15px] text-stone-700">
@@ -36,10 +37,23 @@ export default function StatusLine() {
         </span>{" "}
         · {h.llm.provider}/{h.llm.model} {h.llm.reachable ? "connected" : "unreachable — quizzes & tutor need it"}
         {reason} · tracing {h.tracing ? "on" : "off"}
+        {h.tracing_status && !h.tracing_status.available && h.tracing_status.enabled
+          ? ` (${h.tracing_status.detail})`
+          : ""}
       </p>
       {h.db_error && (
         <p className="mt-2 rounded-sm border border-coral bg-white px-2.5 py-1.5 text-sm text-coral">
           <strong>Database:</strong> {h.db_error}
+        </p>
+      )}
+      {store && !store.persistent && (
+        <p className="mt-2 rounded-sm border-2 border-ink bg-volt px-3 py-2 text-sm text-ink">
+          <strong className="font-display">Nothing is being saved.</strong> {store.detail}
+        </p>
+      )}
+      {store && store.persistent && (
+        <p className="mt-1.5 text-xs text-stone-500">
+          Storage: {store.kind} · {store.detail}
         </p>
       )}
     </>
