@@ -22,8 +22,10 @@ hosted OpenAI-compatible endpoint.
   runs on free browser speech APIs by default.
 - **Scan-a-question solver** — photograph a problem, get guided steps, not just
   the answer.
-- **Study podcasts** — generated scripts read aloud in-browser; hook up Whisper /
-  Piper later for offline audio.
+- **Study podcasts** — the episode is planned first, then written section by section
+  against that plan, so a long episode stays on-arc instead of drifting into a
+  random talk. Chapters, follow-along highlighting, and two host voices in the
+  browser — no audio keys needed.
 - **Progress + gamification** — mastery per topic, streaks, badges.
 - **Breaks + playground** — logic puzzles, daily challenges, and a plugin slot
   for interactive visual explainers.

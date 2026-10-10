@@ -37,5 +37,23 @@ body {
   * {
     animation: none !important;
     transition: none !important;
+    scroll-behavior: auto !important;
   }
+}
+
+/* Keyboard users should always be able to see where they are. */
+:focus-visible {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.bg-ink :focus-visible,
+header :focus-visible {
+  outline-color: var(--color-volt);
+}
+
+/* Scrolling transcripts should not shift the layout when they overflow. */
+.scroll-slim {
+  scrollbar-width: thin;
 }

@@ -29,20 +29,21 @@ export default function Nav() {
     window.dispatchEvent(new Event("oep-lang"));
   };
   return (
-    <header className="bg-ink text-white">
+    <header className="sticky top-0 z-50 bg-ink text-white">
       <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-5 gap-y-2 px-5 py-3">
         <Link href="/" className="font-display text-xl font-black tracking-tight text-volt">
           openExamPrep
         </Link>
-        <nav className="flex flex-wrap gap-x-4 gap-y-1 text-[15px]">
+        <nav className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[15px]">
           {links.map((l) => (
             <Link
               key={l.href}
               href={l.href}
+              aria-current={path === l.href ? "page" : undefined}
               className={
                 path === l.href
-                  ? "font-bold text-volt underline decoration-volt underline-offset-4"
-                  : "text-stone-300 hover:text-white"
+                  ? "rounded-full bg-volt px-3 py-0.5 font-display font-extrabold text-ink"
+                  : "rounded-full px-3 py-0.5 text-stone-300 hover:bg-white/10 hover:text-white"
               }
             >
               {t(lang, l.key)}

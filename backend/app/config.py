@@ -64,6 +64,12 @@ class Settings(BaseSettings):
     upload_dir: str = ""
     max_upload_mb: int = 0  # 0 = auto: 4 MB hosted (Vercel caps bodies at 4.5), 50 MB local
 
+    # Podcast: target length of one planned section, the ceiling on sections per
+    # episode, and how many sections may be written at once.
+    podcast_section_minutes: int = 4
+    podcast_max_sections: int = 16
+    podcast_workers: int = 4
+
     @property
     def is_serverless(self) -> bool:
         """True on Vercel (and similar) where the filesystem is read-only."""
