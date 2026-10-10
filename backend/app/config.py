@@ -5,6 +5,22 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Native output dimensions of the embedding models we know about. Deriving the
+# pgvector column size from the model name keeps the two from drifting apart.
+EMBED_DIMS = {
+    "nomic-embed-text": 768,
+    "text-embedding-3-small": 1536,
+    "text-embedding-3-large": 3072,
+    "text-embedding-ada-002": 1536,
+    "text-embedding-005": 768,
+    "gemini-embedding-001": 3072,
+    "gemini-embedding-2": 3072,
+    "qwen3-embedding-0.6b": 1024,
+    "qwen3-embedding-4b": 2560,
+    "qwen3-embedding-8b": 4096,
+}
+DEFAULT_EMBED_DIM = 1536
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=["../.env", ".env"], extra="ignore")
@@ -15,10 +31,13 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen2.5:7b"
     ollama_embed_model: str = "nomic-embed-text"
 
-    hosted_base_url: str = ""
+    # Hosted OpenAI-compatible endpoint. Defaults to Vercel AI Gateway, where one
+    # base URL and one key serve both chat and embeddings. Any other
+    # OpenAI-compatible provider works by overriding these three.
+    hosted_base_url: str = "https://ai-gateway.vercel.sh/v1"
     hosted_api_key: str = ""
-    hosted_model: str = "qwen/qwen-2.5-72b-instruct"
-    hosted_embed_model: str = ""
+    hosted_model: str = "alibaba/qwen3.7-flash"
+    hosted_embed_model: str = "openai/text-embedding-3-small"
 
     # Optional endpoints used *only* for embeddings. Empty = reuse the chat
     # provider. Needed when the chat provider has no embedding models (e.g.
@@ -28,7 +47,9 @@ class Settings(BaseSettings):
     embed_api_key: str = ""
     embed_model_name: str = ""
 
-    embed_dim: int = 768  # nomic-embed-text; override to match your embed model
+    # 0 = infer from the embed model (see resolved_embed_dim). Set it only for a
+    # model that is not in EMBED_DIMS.
+    embed_dim: int = 0
 
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
@@ -63,7 +84,14 @@ class Settings(BaseSettings):
     @property
     def chat_api_key(self) -> str:
         if self.model_provider == "hosted":
-            return self.hosted_api_key
+            # Explicit setting first, then Vercel's conventional variable name,
+            # then the OIDC token Vercel injects into deployments — which lets a
+            # project call AI Gateway without storing a key at all.
+            return (
+                self.hosted_api_key
+                or os.getenv("AI_GATEWAY_API_KEY", "")
+                or os.getenv("VERCEL_OIDC_TOKEN", "")
+            )
         return "ollama"  # Ollama ignores the key but the header is required
 
     @property
@@ -81,6 +109,13 @@ class Settings(BaseSettings):
     @property
     def embed_key(self) -> str:
         return self.embed_api_key or self.chat_api_key
+
+    @property
+    def resolved_embed_dim(self) -> int:
+        if self.embed_dim:
+            return self.embed_dim
+        name = self.embed_model.rsplit("/", 1)[-1].split(":", 1)[0]
+        return EMBED_DIMS.get(name, DEFAULT_EMBED_DIM)
 
     @property
     def upload_path(self) -> str:

@@ -29,7 +29,36 @@ step.
 
 ## Second: a model provider
 
-### Ollama Cloud (cheap, open weights, OpenAI-compatible)
+### Vercel AI Gateway (recommended)
+
+One base URL and one key serve both chat and embeddings, so there is nothing to
+reconcile across two providers. AI Gateway is available on **all plans**, charges the
+provider's list price with **no markup**, and every team gets **$5/month of free
+credits** on a subset of models — see
+[the free-tier model list](https://vercel.com/ai-gateway/models?freeTier=true).
+
+```
+HOSTED_BASE_URL=https://ai-gateway.vercel.sh/v1
+HOSTED_MODEL=alibaba/qwen3.7-flash
+HOSTED_EMBED_MODEL=openai/text-embedding-3-small
+```
+
+Both IDs are confirmed against the live catalogue (`GET /v1/models` — 415 models at
+the time of writing): `alibaba/qwen3.7-flash` is a *language* model and
+`openai/text-embedding-3-small` an *embedding* model. Because they share the gateway,
+no `EMBED_BASE_URL` is needed.
+
+**Authentication.** Create a key on the AI Gateway page and set `HOSTED_API_KEY`. On
+Vercel you can also skip that entirely: the backend falls back to Vercel's
+conventional `AI_GATEWAY_API_KEY`, and then to the `VERCEL_OIDC_TOKEN` Vercel injects
+into every deployment — so a project can call the gateway with no stored secret.
+
+> Probing the gateway with **no** `Authorization` header returns `200`, but a *bad*
+> key returns `401`. `/api/health` therefore treats `401/403/404` as unreachable
+> (rather than "reachable but busy") and reports the status code, so a mistyped key is
+> caught immediately instead of looking healthy while every call 503s.
+
+### Ollama Cloud (alternative — open weights, needs a separate embedder)
 
 1. Create an API key at <https://ollama.com/settings/keys>.
 2. Base URL is `https://ollama.com/v1`.
@@ -69,16 +98,17 @@ They are shared by every service in a Services project.
 | Variable | Value |
 |---|---|
 | `MODEL_PROVIDER` | `hosted` |
-| `HOSTED_BASE_URL` | `https://ollama.com/v1` |
-| `HOSTED_API_KEY` | your key — **never** prefix with `NEXT_PUBLIC_` |
-| `HOSTED_MODEL` | `gpt-oss:20b` (or `nemotron-3-nano`, `gemma4`) |
-| `EMBED_BASE_URL` | an embeddings provider, e.g. `https://api.openai.com/v1` |
-| `EMBED_API_KEY` | that provider's key |
-| `EMBED_MODEL_NAME` | `text-embedding-3-small` |
-| `EMBED_DIM` | `1536` (must match the model) |
+| `HOSTED_BASE_URL` | `https://ai-gateway.vercel.sh/v1` |
+| `HOSTED_API_KEY` | your AI Gateway key — **never** prefix with `NEXT_PUBLIC_`. Optional on Vercel: falls back to `AI_GATEWAY_API_KEY`, then `VERCEL_OIDC_TOKEN`. |
+| `HOSTED_MODEL` | `alibaba/qwen3.7-flash` |
+| `HOSTED_EMBED_MODEL` | `openai/text-embedding-3-small` |
 | `DATABASE_URL` | your Neon/Supabase connection string |
 | `FRONTEND_URL` | your site URL — **Shape B only** (Shape A is same-origin) |
 | `NEXT_PUBLIC_API_URL` | your backend URL — **Shape B only**; omit for Shape A |
+
+That is the whole list on the default gateway setup. `EMBED_*` stay empty (the gateway
+serves embeddings too) and `EMBED_DIM` is inferred as **1536** from
+`text-embedding-3-small`.
 
 Optional: `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` / `LANGFUSE_HOST` to trace
 every call. Leave empty to skip tracing.
@@ -145,8 +175,9 @@ Cross-origin is expected here and the backend allows exactly the origin in
 
 | Symptom | Cause |
 |---|---|
-| `status: degraded`, `db: true`, `llm.reachable: false` | wrong `HOSTED_BASE_URL`/`HOSTED_API_KEY`, or the account is out of credits |
-| Answers cite nothing, `degraded: true` on chat | `EMBED_*` unset or unreachable — retrieval fell back to keyword search |
+| `status: degraded`, `db: true`, `llm.reachable: false` | wrong `HOSTED_BASE_URL`/`HOSTED_API_KEY`, or out of credits. `/api/health` carries `status_code` (401 = key rejected, 404 = wrong base URL) and the status widget names the reason |
+| `● ready` but chat fails with 404 | `HOSTED_MODEL` is not in the provider's catalogue. Health reports `model_listed: false` when the provider enumerates models |
+| Answers cite nothing, `degraded: true` on chat | embeddings unreachable — retrieval fell back to keyword search |
 | `500` on first request, then fine | cold start hit a database connection limit — use the pooled connection string |
 | `FUNCTION_PAYLOAD_TOO_LARGE` on upload | file over 4.5 MB |
-| `dimension mismatch` from pgvector | `EMBED_DIM` changed after chunks were embedded; drop the `chunks` table and re-ingest |
+| pgvector `dimension mismatch` after switching embed model | `chunks.embedding` is sized for the old model (768 for `nomic-embed-text`, 1536 for `text-embedding-3-small`). Run `DROP TABLE chunks;` and re-upload your material — vectors cannot be converted between dimensions |

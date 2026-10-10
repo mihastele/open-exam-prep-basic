@@ -11,7 +11,7 @@ from .db import Base, is_postgres
 if is_postgres():
     from pgvector.sqlalchemy import Vector
 
-    Embedding = Vector(get_settings().embed_dim)
+    Embedding = Vector(get_settings().resolved_embed_dim)
 else:
     Embedding = JSON  # SQLite dev fallback: cosine similarity in Python
 

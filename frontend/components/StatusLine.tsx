@@ -17,13 +17,24 @@ export default function StatusLine() {
       </p>
     );
   if (!h) return <p className="text-sm text-stone-600">Checking backend…</p>;
+  const reason = !h.llm.reachable
+    ? h.llm.status_code === 401 || h.llm.status_code === 403
+      ? " — the API key was rejected"
+      : h.llm.status_code === 404
+        ? " — check the provider base URL"
+        : h.llm.detail
+          ? ` — ${h.llm.detail}`
+          : ""
+    : h.llm.model_listed === false
+      ? " — but the provider does not list that model"
+      : "";
   return (
     <p className="text-[15px] text-stone-700">
       <span className={`font-display font-extrabold ${h.status === "ok" ? "text-ink" : "text-coral"}`}>
         {h.status === "ok" ? "● ready" : "● degraded"}
       </span>{" "}
-      · {h.llm.provider}/{h.llm.model} {h.llm.reachable ? "connected" : "unreachable — quizzes & tutor need it"}{" "}
-      · tracing {h.tracing ? "on" : "off"}
+      · {h.llm.provider}/{h.llm.model} {h.llm.reachable ? "connected" : "unreachable — quizzes & tutor need it"}
+      {reason} · tracing {h.tracing ? "on" : "off"}
     </p>
   );
 }

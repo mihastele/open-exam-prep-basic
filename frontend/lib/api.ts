@@ -44,6 +44,16 @@ export async function upload<T>(path: string, file: File, extra?: Record<string,
 export type Health = {
   status: "ok" | "degraded";
   db: boolean;
-  llm: { provider: string; model: string; reachable: boolean };
+  llm: {
+    provider: string;
+    model: string;
+    reachable: boolean;
+    /** HTTP status from the provider's /models probe, when it failed. */
+    status_code?: number;
+    /** Transport error detail, when the request never got a response. */
+    detail?: string;
+    /** False when the provider's model list does not contain llm.model. */
+    model_listed?: boolean;
+  };
   tracing: boolean;
 };

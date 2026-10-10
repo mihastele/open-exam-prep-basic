@@ -16,18 +16,38 @@ class LLMUnavailable(Exception):
 
 
 def _headers() -> dict:
-    return {"Authorization": f"Bearer {get_settings().chat_api_key}"}
+    key = get_settings().chat_api_key
+    if not key:
+        # Sending "Bearer " would surface as a cryptic httpx header error; say
+        # what is actually wrong instead.
+        raise LLMUnavailable(
+            "no API key configured — set HOSTED_API_KEY (or AI_GATEWAY_API_KEY) "
+            "when MODEL_PROVIDER=hosted"
+        )
+    return {"Authorization": f"Bearer {key}"}
 
 
 def provider_status() -> dict:
     s = get_settings()
     name = "hosted" if (s.model_provider == "hosted" and s.hosted_base_url) else "ollama"
+    status: dict = {"provider": name, "model": s.chat_model, "reachable": False}
     try:
-        r = httpx.get(f"{s.chat_base_url}/models", headers=_headers(), timeout=2.0)
-        reachable = r.status_code < 500
-    except Exception:
-        reachable = False
-    return {"provider": name, "model": s.chat_model, "reachable": reachable}
+        r = httpx.get(f"{s.chat_base_url}/models", headers=_headers(), timeout=5.0)
+        # 401/403 = missing or rejected key, 404 = wrong base URL. Those are
+        # failures, not "reachable but busy" — reporting them as reachable would
+        # call a mistyped key healthy while every real call 503s. 429 is alive.
+        status["reachable"] = r.status_code < 400 or r.status_code == 429
+        if r.status_code >= 400:
+            status["status_code"] = r.status_code
+        else:
+            listed = {m.get("id") for m in (r.json().get("data") or []) if isinstance(m, dict)}
+            # Only meaningful when the provider actually enumerates models, and
+            # advisory: some providers hide models or use different aliases.
+            if listed:
+                status["model_listed"] = s.chat_model in listed
+    except Exception as e:
+        status["detail"] = str(e)[:200]
+    return status
 
 
 def chat(
@@ -39,6 +59,7 @@ def chat(
     json_mode: bool = False,
 ) -> str:
     s = get_settings()
+    headers = _headers()
     payload: dict = {
         "model": s.chat_model,
         "messages": messages,
@@ -53,7 +74,7 @@ def chat(
             r = httpx.post(
                 f"{s.chat_base_url}/chat/completions",
                 json=payload,
-                headers=_headers(),
+                headers=headers,
                 timeout=120.0,
             )
             r.raise_for_status()
@@ -68,11 +89,16 @@ def chat(
 
 def embed(texts: list[str]) -> list[list[float]]:
     s = get_settings()
+    key = s.embed_key
+    if not key:
+        raise LLMUnavailable(
+            "no embedding API key configured — set EMBED_API_KEY or HOSTED_API_KEY"
+        )
     try:
         r = httpx.post(
             f"{s.embed_url}/embeddings",
             json={"model": s.embed_model, "input": texts},
-            headers={"Authorization": f"Bearer {s.embed_key}"},
+            headers={"Authorization": f"Bearer {key}"},
             timeout=120.0,
         )
         r.raise_for_status()

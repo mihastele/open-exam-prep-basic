@@ -83,27 +83,32 @@ One variable in `.env` picks the provider; no code changes:
 | `MODEL_PROVIDER` | Uses | Needs |
 |---|---|---|
 | `ollama` (default) | Local Ollama, OpenAI-compatible `/v1` | `ollama serve` + pulled models |
-| `hosted` | Any OpenAI-compatible chat API | `HOSTED_BASE_URL` + `HOSTED_API_KEY` |
+| `hosted` | Vercel AI Gateway by default; any OpenAI-compatible chat API | `HOSTED_API_KEY` |
 
-Embeddings follow the chat provider unless you set `EMBED_BASE_URL` /
-`EMBED_API_KEY` / `EMBED_MODEL_NAME` — needed for providers that serve chat models
-only (Ollama Cloud has no cloud embedding models), and remember to match `EMBED_DIM`.
-Without a reachable embedder, retrieval falls back to keyword search and says so.
+`hosted` defaults to [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) —
+`alibaba/qwen3.7-flash` for chat and `openai/text-embedding-3-small` for embeddings,
+both behind one base URL and one key. Embeddings follow the chat provider unless you
+set `EMBED_BASE_URL` / `EMBED_API_KEY` / `EMBED_MODEL_NAME`, which is what you need for
+providers that serve chat models only (Ollama Cloud has no cloud embedding models).
+`EMBED_DIM` is inferred from the embed model name so the pgvector column cannot drift
+from the model; without a reachable embedder, retrieval falls back to keyword search
+and says so.
 
-If no provider is reachable, `/api/health` reports `degraded` and the API returns an
-explicit 503 instead of fake output.
+If no provider is reachable, `/api/health` reports `degraded` (with the HTTP status
+and reason) and the API returns an explicit 503 instead of fake output.
 
 ## Deploy free on Vercel
 
 The repo is ready to deploy as-is: the Next.js app and the FastAPI backend go up
 together (one Vercel **Services** project, or two plain projects), against a free
-Neon/Supabase Postgres and a cheap OpenAI-compatible model. The API key lives only in
-the backend's server-side env vars — the browser only ever calls your own `/api/...`
-and never sees it.
+Neon/Supabase Postgres and Vercel AI Gateway. The API key lives only in the backend's
+server-side env vars — the browser only ever calls your own `/api/...` and never sees
+it; on Vercel the gateway key can even be dropped in favour of the deployment's OIDC
+token.
 
 See [docs/VERCEL.md](docs/VERCEL.md) for the full walkthrough, the env vars to set,
-the Ollama Cloud model picks, and the free-tier limits (4.5 MB request bodies,
-ephemeral disk, no OCR).
+the gateway setup, and the free-tier limits (4.5 MB request bodies, ephemeral disk,
+no OCR).
 
 
 ## Langfuse (optional, recommended)
