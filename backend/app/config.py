@@ -2,7 +2,9 @@
 
 import os
 from functools import lru_cache
+from typing import Any
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Native output dimensions of the embedding models we know about. Deriving the
@@ -24,6 +26,25 @@ DEFAULT_EMBED_DIM = 1536
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=["../.env", ".env"], extra="ignore")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _blank_means_unset(cls, data: Any) -> Any:
+        """Treat a present-but-empty environment variable as if it were unset.
+
+        Dashboards and `.env` files routinely carry `SOMETHING=` to mean "leave it
+        at the default". Pydantic reads that as an explicit empty string, so an
+        `int` field fails to parse and `Settings()` raises. That happens while
+        `app.db` is building its engine — i.e. at *import* time — which takes the
+        whole serverless function down before any handler, including
+        `/api/health`, can report it. Dropping the blank lets the field default
+        apply instead, and keeps `FOO=` safe to leave in a config file.
+        """
+        if isinstance(data, dict):
+            return {
+                k: v for k, v in data.items() if not (isinstance(v, str) and not v.strip())
+            }
+        return data
 
     model_provider: str = "ollama"  # "ollama" | "hosted"
 

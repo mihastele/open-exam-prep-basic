@@ -29,7 +29,7 @@ with TestClient(create_app(), raise_server_exceptions=False) as client:
 """
 
 
-def _boot(database_url: str) -> subprocess.CompletedProcess:
+def _boot(database_url: str, extra: dict | None = None) -> subprocess.CompletedProcess:
     env = {k: v for k, v in os.environ.items() if k != "DATABASE_URL"}
     env.update(
         {
@@ -41,9 +41,29 @@ def _boot(database_url: str) -> subprocess.CompletedProcess:
             "LANGFUSE_SECRET_KEY": "",
         }
     )
+    env.update(extra or {})
     return subprocess.run(
         [sys.executable, "-c", PROG], env=env, cwd=BACKEND, capture_output=True, text=True
     )
+
+
+def test_blank_numeric_env_vars_do_not_break_cold_start(tmp_path):
+    """The exact production failure: EMBED_DIM= and MAX_UPLOAD_MB= set to "".
+
+    A dashboard (or `.env` copied from the example) holding an empty string for a
+    numeric setting used to raise while the engine was built, so the function died
+    on import and every route returned a bare 500.
+    """
+    proc = _boot(
+        f"sqlite:///{(tmp_path / 'ok.db').as_posix()}",
+        extra={"EMBED_DIM": "", "MAX_UPLOAD_MB": "", "PODCAST_WORKERS": ""},
+    )
+    output = proc.stdout + proc.stderr
+
+    assert "RESULT 200" in proc.stdout, output[-2000:]
+    body = json.loads(proc.stdout.split("RESULT ", 1)[1].split("\n", 1)[0][4:])
+    assert body["db"] is True
+    assert "db_error" not in body
 
 
 def test_unusable_database_reports_degraded_instead_of_crashing(tmp_path):
