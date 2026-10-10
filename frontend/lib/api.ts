@@ -55,5 +55,7 @@ export type Health = {
     /** False when the provider's model list does not contain llm.model. */
     model_listed?: boolean;
   };
+  /** Why the database is unusable, when it is. Present only on failure. */
+  db_error?: string;
   tracing: boolean;
 };

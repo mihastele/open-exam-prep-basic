@@ -29,12 +29,19 @@ export default function StatusLine() {
       ? " — but the provider does not list that model"
       : "";
   return (
-    <p className="text-[15px] text-stone-700">
-      <span className={`font-display font-extrabold ${h.status === "ok" ? "text-ink" : "text-coral"}`}>
-        {h.status === "ok" ? "● ready" : "● degraded"}
-      </span>{" "}
-      · {h.llm.provider}/{h.llm.model} {h.llm.reachable ? "connected" : "unreachable — quizzes & tutor need it"}
-      {reason} · tracing {h.tracing ? "on" : "off"}
-    </p>
+    <>
+      <p className="text-[15px] text-stone-700">
+        <span className={`font-display font-extrabold ${h.status === "ok" ? "text-ink" : "text-coral"}`}>
+          {h.status === "ok" ? "● ready" : "● degraded"}
+        </span>{" "}
+        · {h.llm.provider}/{h.llm.model} {h.llm.reachable ? "connected" : "unreachable — quizzes & tutor need it"}
+        {reason} · tracing {h.tracing ? "on" : "off"}
+      </p>
+      {h.db_error && (
+        <p className="mt-2 rounded-sm border border-coral bg-white px-2.5 py-1.5 text-sm text-coral">
+          <strong>Database:</strong> {h.db_error}
+        </p>
+      )}
+    </>
   );
 }

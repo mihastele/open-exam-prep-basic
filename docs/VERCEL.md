@@ -24,8 +24,14 @@ Create a free Postgres with pgvector — [Neon](https://neon.tech) or
 connection string; use Neon's **pooled** (`-pooler`) host, because each serverless
 invocation opens its own connection.
 
+Paste the URL exactly as your provider gives it — a plain `postgresql://…` is fine,
+the backend rewrites it to name the psycopg driver. Forgetting this is not fatal, but
+not setting `DATABASE_URL` at all is: there is no writable disk for SQLite to fall
+back to.
+
 The app creates the extension and its tables on first boot, so there is no migration
-step.
+step. If it cannot reach the database, it does **not** crash — `/api/health` reports
+`db: false` with a `db_error` string and the status widget shows it.
 
 ## Second: a model provider
 
@@ -175,6 +181,7 @@ Cross-origin is expected here and the backend allows exactly the origin in
 
 | Symptom | Cause |
 |---|---|
+| `FUNCTION_INVOCATION_FAILED` on **every** route | the function died at cold start — in practice almost always the database (unset `DATABASE_URL`, an unreachable host, or no permission to `CREATE EXTENSION vector`). Startup no longer raises for this, so redeploy and read `/api/health` → `db_error` for the exact message; the raw traceback is under Deployments → Functions → the runtime log |
 | `status: degraded`, `db: true`, `llm.reachable: false` | wrong `HOSTED_BASE_URL`/`HOSTED_API_KEY`, or out of credits. `/api/health` carries `status_code` (401 = key rejected, 404 = wrong base URL) and the status widget names the reason |
 | `● ready` but chat fails with 404 | `HOSTED_MODEL` is not in the provider's catalogue. Health reports `model_listed: false` when the provider enumerates models |
 | Answers cite nothing, `degraded: true` on chat | embeddings unreachable — retrieval fell back to keyword search |
