@@ -45,7 +45,15 @@ export type Health = {
   status: "ok" | "degraded";
   db: boolean;
   /** What we are storing in, and whether it survives a restart. */
-  datastore?: { kind: string; persistent: boolean; detail: string };
+  datastore?: {
+    kind: string;
+    persistent: boolean;
+    detail: string;
+    /** True when a configured database was ignored because it was unusable. */
+    fallback?: boolean;
+    /** Why it was ignored (redacted — never a password). */
+    reason?: string;
+  };
   llm: {
     provider: string;
     model: string;

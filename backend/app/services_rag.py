@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from . import services_llm as llm
-from .db import is_postgres
+from .db import has_pgvector, is_postgres
 from .models import Chunk
 
 TOKEN = re.compile(r"[a-zA-ZÀ-ž0-9]+")
@@ -65,7 +65,7 @@ def retrieve(
         q = llm.embed([query])[0]
     except llm.LLMUnavailable:
         return _keyword_rank(query, chunks, k), True
-    if is_postgres():
+    if is_postgres() and has_pgvector():
         stmt = select(Chunk)
         if document_ids:
             stmt = stmt.where(Chunk.document_id.in_(document_ids))

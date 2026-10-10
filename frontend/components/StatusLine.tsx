@@ -48,8 +48,14 @@ export default function StatusLine() {
       )}
       {store && !store.persistent && (
         <p className="mt-2 rounded-sm border-2 border-ink bg-volt px-3 py-2 text-sm text-ink">
-          <strong className="font-display">Nothing is being saved.</strong> {store.detail}
+          <strong className="font-display">
+            {store.fallback ? "The database was ignored — nothing is being saved." : "Nothing is being saved."}
+          </strong>{" "}
+          {store.detail}
         </p>
+      )}
+      {store?.reason && (
+        <p className="mt-1.5 text-xs text-stone-500">Why: {store.reason}</p>
       )}
       {store && store.persistent && (
         <p className="mt-1.5 text-xs text-stone-500">

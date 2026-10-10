@@ -6,9 +6,9 @@ from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text,
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .config import get_settings
-from .db import Base, is_postgres
+from .db import Base, has_pgvector, is_postgres
 
-if is_postgres():
+if is_postgres() and has_pgvector():
     from pgvector.sqlalchemy import Vector
 
     Embedding = Vector(get_settings().resolved_embed_dim)

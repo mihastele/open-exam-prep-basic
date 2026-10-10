@@ -42,9 +42,23 @@ Paste the URL exactly as your provider gives it — a plain `postgresql://…` i
 the backend rewrites it to name the psycopg driver. Prefer Neon's **pooled**
 (`-pooler`) host, because each serverless invocation opens its own connection.
 
-The app creates the extension and its tables on first boot, so there is no migration
-step. If it cannot reach the database, it does **not** crash — `/api/health` reports
-`db: false` with a `db_error` string and the status widget shows it.
+**A database that does not answer is ignored, not fatal.** The backend probes
+`DATABASE_URL` once at startup — bounded by a 10 s connect timeout — and if it cannot
+connect it drops that database for the instance and runs on the SQLite fallback.
+`/api/health` reports `datastore.fallback: true` with the reason, and the status widget
+says so plainly. Nothing is hidden: an app that quietly loses your material is worse
+than one that says it is.
+
+That 10 s is not added latency. A failed `CREATE TABLE` used to spend the same 10 s and
+then leave **every** DB-backed route returning 503 until the instance recycled; the
+probe converts a permanently broken deployment into a working one. A database that
+answers is never discarded.
+
+**Connecting is the bar, not pgvector.** A Postgres that connects but cannot create the
+`vector` extension is still used: material stays persistent and retrieval falls back to
+ranking in Python (`datastore.pgvector: false`, and answers are labelled as keyword
+search in the UI). Discarding a working database to avoid a missing extension would
+lose your data for no reason. Only an unreachable one triggers the fallback.
 
 ## Second: a model provider
 
@@ -197,7 +211,9 @@ Cross-origin is expected here and the backend allows exactly the origin in
 
 | Symptom | Cause |
 |---|---|
-| A **“Nothing is being saved”** banner | no `DATABASE_URL`, so it is running on ephemeral SQLite — see *First: a database (optional)*. Uploads vanish on the next cold start |
+| A **“Nothing is being saved”** banner | either no `DATABASE_URL` at all, or one that did not answer — see *First: a database (optional)*. Uploads vanish on the next cold start, so fix `DATABASE_URL` |
+| `datastore.fallback: true` | the configured database was unreachable at startup, so this instance is on ephemeral SQLite. `datastore.reason` names the cause (wrong host, rejected credentials, paused project) |
+| `datastore.pgvector: false` | connected, but the `vector` extension is unavailable, so retrieval ranks in Python. Material still persists; answers say they came from keyword search |
 | `FUNCTION_INVOCATION_FAILED` on **every** route | the function died at cold start. Startup no longer raises for a bad database, so redeploy and read `/api/health` → `db_error`; an invalid *setting* (not a blank one) still fails at import, and the traceback is under Deployments → Functions → the runtime log |
 | `status: degraded`, `db: true`, `llm.reachable: false` | wrong `HOSTED_BASE_URL`/`HOSTED_API_KEY`, or out of credits. `/api/health` carries `status_code` (401 = key rejected, 404 = wrong base URL) and the status widget names the reason |
 | `● ready` but chat fails with 404 | `HOSTED_MODEL` is not in the provider's catalogue. Health reports `model_listed: false` when the provider enumerates models |

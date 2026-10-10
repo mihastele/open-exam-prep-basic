@@ -165,43 +165,58 @@ class Settings(BaseSettings):
         return bool(self.langfuse_public_key and self.langfuse_secret_key)
 
     @property
-    def resolved_database_url(self) -> str:
-        """The URL the engine actually uses. An empty DATABASE_URL means 'auto'."""
-        if self.database_url:
-            return self.database_url
+    def default_database_url(self) -> str:
+        """What we use when nothing is configured *or* when the configured one fails.
+
+        The database is optional, so this has to be somewhere writable — the cwd is
+        read-only on a serverless host. `tempfile` respects TMPDIR and is the one
+        writable place on Vercel.
+        """
         if self.is_serverless:
-            # tempfile respects TMPDIR and is the one writable place on Vercel.
             path = os.path.join(tempfile.gettempdir(), "oep.db").replace("\\", "/")
             return f"sqlite:///{path}"
         return "sqlite:///./oep.db"
 
     @property
+    def resolved_database_url(self) -> str:
+        """What is configured. An empty DATABASE_URL means 'use the default'."""
+        return self.database_url or self.default_database_url
+
+    @property
     def datastore(self) -> dict:
-        """What we are storing in, and whether it survives. Shown by /api/health."""
-        url = self.resolved_database_url
-        if url.startswith(("postgresql", "postgres")):
-            return {
-                "kind": "postgres",
-                "persistent": True,
-                "detail": "Postgres with pgvector — material and vectors are kept.",
-            }
-        if self.is_serverless:
-            return {
-                "kind": "sqlite-ephemeral",
-                "persistent": False,
-                "detail": (
-                    "No database configured, so this is running on SQLite in the "
-                    "temp directory. It resets on every cold start and is not "
-                    "shared between concurrent instances, so uploaded material "
-                    "disappears. Attach a free Postgres (Neon or Supabase — both "
-                    "have a permanent free tier) to keep it."
-                ),
-            }
+        """What we are *trying* to store in. The live answer comes from app.db,
+        which knows whether the configured database actually answered."""
+        return describe_store(self.resolved_database_url, self.is_serverless)
+
+
+def describe_store(url: str, serverless: bool) -> dict:
+    """Describe a database URL for humans: what it is, and whether it survives.
+
+    A pure function because `app.db` needs the same description for the store it
+    ended up using, which is not always the one that was configured.
+    """
+    if url.startswith(("postgresql", "postgres")):
         return {
-            "kind": "sqlite",
+            "kind": "postgres",
             "persistent": True,
-            "detail": "SQLite file on disk — fine locally, not for production.",
+            "detail": "Postgres with pgvector — material and vectors are kept.",
         }
+    if serverless:
+        return {
+            "kind": "sqlite-ephemeral",
+            "persistent": False,
+            "detail": (
+                "SQLite in the temp directory. It resets on every cold start and is "
+                "not shared between concurrent instances, so uploaded material "
+                "disappears. Attach a free Postgres (Neon or Supabase — both have a "
+                "permanent free tier) to keep it."
+            ),
+        }
+    return {
+        "kind": "sqlite",
+        "persistent": True,
+        "detail": "SQLite file on disk — fine locally, not for production.",
+    }
 
 
 @lru_cache

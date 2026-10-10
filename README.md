@@ -140,6 +140,12 @@ For anything real, attach Postgres. There is a permanent free tier: **Neon**
 (0.5 GB, 100 CU-hours/month, scale-to-zero) or **Supabase** (500 MB, but free projects
 pause after a week idle). Both ship pgvector, so retrieval works out of the box.
 
+**If the database you configure does not answer, it is ignored rather than fatal.** The
+backend probes it once at startup; on failure it runs on the SQLite fallback for that
+instance and says so in `/api/health` and in the UI, with the reason. You get a working
+app with a loud warning instead of a broken one. A Postgres that connects but lacks
+pgvector is still used — material persists and retrieval ranks in Python.
+
 ## Project layout
 
 ```
