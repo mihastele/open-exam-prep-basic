@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, post } from "../../lib/api";
+import { safeName, type ExportDoc } from "../../lib/export";
+import ExportMenu from "../../components/ExportMenu";
 import { createScriptPlayer, type ScriptLine, type ScriptPlayer } from "../../lib/speech";
 
 type Doc = { id: number; title: string; source_type: string; chunks: number };
@@ -80,6 +82,46 @@ export default function Podcast() {
 
   const words = useMemo(() => lines.reduce((n, l) => n + l.text.split(/\s+/).length, 0), [lines]);
   const ready = sections.filter(Boolean).length;
+
+  /**
+   * The episode as one document. Memoised because playback updates `cursor` on
+   * every line, and rebuilding a 4,500-line transcript on each of those renders
+   * would be pure waste.
+   */
+  const exportDoc = useMemo<ExportDoc | null>(() => {
+    if (!outline) return null;
+    const written = sections.filter((s): s is Section => Boolean(s));
+    const blocks: ExportDoc["blocks"] = [
+      {
+        kind: "meta",
+        pairs: [
+          ["Planned length", `${outline.planned_minutes} min`],
+          ["Sections", `${written.length} of ${outline.sections.length}`],
+          ["Lines", String(written.reduce((n, s) => n + s.segments.length, 0))],
+          ["Hosts", "ADA & BEN"],
+          ["Generated", new Date().toLocaleString()],
+        ],
+      },
+    ];
+    if (outline.blurb) blocks.push({ kind: "paragraph", text: outline.blurb });
+
+    const rows: string[][] = [];
+    written.forEach((s, i) => {
+      blocks.push({ kind: "heading", text: `${i + 1}. ${s.heading}`, level: 2 });
+      if (s.goal) blocks.push({ kind: "meta", pairs: [["Goal", s.goal]] });
+      for (const g of s.segments) {
+        blocks.push({ kind: "paragraph", label: g.speaker, text: g.line });
+        rows.push([s.heading, g.speaker, g.line]);
+      }
+    });
+
+    return {
+      title: outline.title,
+      filename: safeName(outline.title || "podcast-episode"),
+      blocks,
+      csv: { headers: ["section", "speaker", "line"], rows },
+    };
+  }, [outline, sections]);
 
   useEffect(() => {
     if (cursor < 0) return;
@@ -163,23 +205,6 @@ export default function Podcast() {
       setErr(String(e));
       setPhase("error");
     }
-  };
-
-  const download = () => {
-    if (!outline) return;
-    const md = [`# ${outline.title}`, "", outline.blurb, ""];
-    sections.forEach((s) => {
-      if (!s) return;
-      md.push(`## ${s.heading}`, "");
-      s.segments.forEach((g) => md.push(`**${g.speaker}:** ${g.line}`));
-      md.push("");
-    });
-    const url = URL.createObjectURL(new Blob([md.join("\n")], { type: "text/markdown" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${outline.title.replace(/[^\w\-. ]+/g, "").trim() || "episode"}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   const currentSection = useMemo(() => {
@@ -267,10 +292,8 @@ export default function Podcast() {
           >
             {busy ? "Writing…" : outline ? "Regenerate episode" : "Generate episode"}
           </button>
-          {outline && !busy && (
-            <button onClick={download} className="rounded-full border-2 border-ink px-5 py-2 font-display font-extrabold hover:bg-mist">
-              Download transcript
-            </button>
+          {outline && !busy && exportDoc && (
+            <ExportMenu doc={exportDoc} label="Export episode" solid align="left" />
           )}
         </div>
         {!canGenerate && !busy && (

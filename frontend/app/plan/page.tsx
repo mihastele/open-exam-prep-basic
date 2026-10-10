@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { api, post } from "../../lib/api";
+import { type ExportBlock, type ExportDoc } from "../../lib/export";
+import ExportMenu from "../../components/ExportMenu";
 import {
   Button,
   Callout,
@@ -64,6 +66,32 @@ export default function PlanPage() {
   const total = plan ? plan.schedule.length : 0;
   const minutes = plan ? plan.schedule.reduce((n, d) => n + d.minutes, 0) : 0;
 
+  /** The schedule is generated too, so it can leave the app like everything else. */
+  function planDoc(): ExportDoc {
+    if (!plan) return { title: "Study plan", filename: "study-plan", blocks: [] };
+    const rows = plan.schedule.map((d) => [d.date, d.topic, String(d.minutes), d.done ? "yes" : "no"]);
+    return {
+      title: `Study plan — exam ${plan.exam_date}`,
+      filename: `study-plan-${plan.exam_date}`,
+      blocks: [
+        {
+          kind: "meta",
+          pairs: [
+            ["Exam day", plan.exam_date],
+            ["Topics", plan.topics.join(", ") || "—"],
+            ["Days", String(total)],
+            ["Planned", `${minutes} min`],
+            ["Progress", `${done} of ${total} done`],
+            ["Exported", new Date().toLocaleString()],
+          ],
+        },
+        { kind: "heading", text: "Schedule", level: 2 },
+        { kind: "table", headers: ["Date", "Topic", "Minutes", "Done"], rows },
+      ],
+      csv: { headers: ["date", "topic", "minutes", "done"], rows },
+    };
+  }
+
   return (
     <div className="pt-8">
       <PageHeader title="Study plan">
@@ -115,6 +143,7 @@ export default function PlanPage() {
             <StatTile value={`${done}/${total}`} label="days done" accent={done === total && total > 0} />
             <StatTile value={`${minutes}m`} label="planned" />
             <StatTile value={plan.exam_date} label="exam day" />
+            <ExportMenu doc={planDoc()} label="Export plan" />
           </div>
 
           <div className="mt-4 max-w-3xl">

@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { post } from "../../lib/api";
+import { safeName, type ExportBlock, type ExportDoc } from "../../lib/export";
+import ExportMenu from "../../components/ExportMenu";
 import { listen, speak } from "../../lib/speech";
 import {
   Button,
@@ -36,6 +38,71 @@ export default function Exam() {
   const [oralFb, setOralFb] = useState("");
   const [msg, setMsg] = useState("");
   const [listening, setListening] = useState(false);
+
+  /**
+   * Both documents are memoised: the mock countdown re-renders this component
+   * every second, and rebuilding a quiz plus its answer key on each tick is waste.
+   */
+  const mockDoc = useMemo<ExportDoc | null>(() => {
+    if (!items.length) return null;
+    const blocks: ExportBlock[] = [
+      {
+        kind: "meta",
+        pairs: [
+          ["Topic", topic || "from uploaded material"],
+          ["Questions", String(items.length)],
+          ["Result", score === null ? "not submitted" : `${Math.round(score * 100)}%`],
+          ["Taken", new Date().toLocaleString()],
+        ],
+      },
+    ];
+    let mcq = 0;
+    items.forEach((it, i) => {
+      blocks.push({ kind: "heading", text: `${i + 1}. ${it.question}`, level: 3 });
+      if (it.options) {
+        const k = mcq;
+        mcq += 1;
+        blocks.push({
+          kind: "bullets",
+          items: it.options.map((o, j) => {
+            const marks: string[] = [];
+            if (j === it.answer_index) marks.push("correct");
+            if (score !== null && answers[k] === j && j !== it.answer_index) marks.push("your answer");
+            return `${String.fromCharCode(65 + j)}. ${o}${marks.length ? `   ← ${marks.join(", ")}` : ""}`;
+          }),
+        });
+      }
+      if (it.model_answer) blocks.push({ kind: "paragraph", text: `Model answer: ${it.model_answer}` });
+    });
+    return {
+      title: topic ? `Mock exam — ${topic}` : "Mock exam",
+      filename: `mock-${safeName(topic || "exam")}`,
+      blocks,
+    };
+  }, [items, answers, score, topic]);
+
+  const oralDoc = useMemo<ExportDoc | null>(() => {
+    if (!oralQ) return null;
+    const blocks: ExportBlock[] = [
+      {
+        kind: "meta",
+        pairs: [
+          ["Topic", topic || "from uploaded material"],
+          ["Graded", new Date().toLocaleString()],
+        ],
+      },
+      { kind: "heading", text: "Question", level: 3 },
+      { kind: "paragraph", text: oralQ },
+      { kind: "heading", text: "Your answer", level: 3 },
+      { kind: "paragraph", text: transcript.trim() || "(no answer given)" },
+    ];
+    if (oralFb) blocks.push({ kind: "heading", text: "Feedback", level: 3 }, { kind: "paragraph", text: oralFb });
+    return {
+      title: `Oral answer — ${oralQ.slice(0, 60)}`,
+      filename: `oral-${safeName(oralQ.slice(0, 40) || "answer")}`,
+      blocks,
+    };
+  }, [oralQ, transcript, oralFb, topic]);
 
   useEffect(() => {
     if (left <= 0 || score !== null) return;
@@ -260,12 +327,17 @@ export default function Exam() {
                     Submit for marking
                   </Button>
                 ) : (
-                  <Card soft className="p-4">
-                    <p className="font-display text-xl font-black">{Math.round(score * 100)}% marked</p>
-                    <div className="mt-2">
-                      <ProgressBar value={score} label="correct answers across the mock" />
+                  <>
+                    <Card soft className="p-4">
+                      <p className="font-display text-xl font-black">{Math.round(score * 100)}% marked</p>
+                      <div className="mt-2">
+                        <ProgressBar value={score} label="correct answers across the mock" />
+                      </div>
+                    </Card>
+                    <div className="mt-3">
+                      {mockDoc && <ExportMenu doc={mockDoc} label="Export this mock" />}
                     </div>
-                  </Card>
+                  </>
                 )}
               </div>
             </div>
@@ -310,9 +382,14 @@ export default function Exam() {
               </div>
 
               {oralFb && (
-                <p className="mt-4 rounded-xl border-2 border-ink bg-mist px-4 py-3 text-[15px] leading-relaxed">
-                  {oralFb}
-                </p>
+                <>
+                  <p className="mt-4 rounded-xl border-2 border-ink bg-mist px-4 py-3 text-[15px] leading-relaxed">
+                    {oralFb}
+                  </p>
+                  <div className="mt-3">
+                    {oralDoc && <ExportMenu doc={oralDoc} label="Export feedback" />}
+                  </div>
+                </>
               )}
             </Card>
           )}

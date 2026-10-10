@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { post } from "../../lib/api";
+import { safeName, type ExportBlock, type ExportDoc } from "../../lib/export";
+import ExportMenu from "../../components/ExportMenu";
 import {
   Button,
   Callout,
@@ -30,6 +32,69 @@ export default function Practice() {
   const [flip, setFlip] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+
+  /** Export a graded (or ungraded) quiz, with the answer key marked up. */
+  function quizDoc(): ExportDoc {
+    const blocks: ExportBlock[] = [
+      {
+        kind: "meta",
+        pairs: [
+          ["Topic", topic || "from uploaded material"],
+          ["Questions", String(items.length)],
+          ["Score", result ? `${Math.round(result.score * 100)}%` : "not graded yet"],
+          ["Generated", new Date().toLocaleString()],
+        ],
+      },
+    ];
+    items.forEach((it, i) => {
+      blocks.push({ kind: "heading", text: `${i + 1}. ${it.question}`, level: 3 });
+      blocks.push({
+        kind: "bullets",
+        items: it.options.map(
+          (o, j) => `${String.fromCharCode(65 + j)}. ${o}${j === it.answer_index ? "   ← correct" : ""}`,
+        ),
+      });
+      if (it.explanation) blocks.push({ kind: "paragraph", text: `Why: ${it.explanation}` });
+    });
+    return {
+      title: topic ? `Quiz — ${topic}` : "Practice quiz",
+      filename: `quiz-${safeName(topic || "practice")}`,
+      blocks,
+      // One row per question with the answer as text: imports into Anki or Sheets.
+      csv: {
+        headers: ["question", "option_a", "option_b", "option_c", "option_d", "answer", "explanation"],
+        rows: items.map((it) => [
+          it.question,
+          ...it.options.slice(0, 4),
+          it.options[it.answer_index] ?? "",
+          it.explanation,
+        ]),
+      },
+    };
+  }
+
+  function cardsDoc(): ExportDoc {
+    const blocks: ExportBlock[] = [
+      {
+        kind: "meta",
+        pairs: [
+          ["Topic", topic || "from uploaded material"],
+          ["Cards", String(cards.length)],
+          ["Generated", new Date().toLocaleString()],
+        ],
+      },
+      ...cards.flatMap((c) => [
+        { kind: "paragraph", label: "Front", text: c.front } as ExportBlock,
+        { kind: "paragraph", label: "Back", text: c.back } as ExportBlock,
+      ]),
+    ];
+    return {
+      title: topic ? `Flashcards — ${topic}` : "Flashcards",
+      filename: `flashcards-${safeName(topic || "practice")}`,
+      blocks,
+      csv: { headers: ["front", "back"], rows: cards.map((c) => [c.front, c.back]) },
+    };
+  }
 
   const quiz = async () => {
     setBusy(true);
@@ -133,6 +198,7 @@ export default function Practice() {
               <div className="flex flex-wrap items-center gap-3">
                 <StatTile value={`${answered}/${items.length}`} label="answered" />
                 <StatTile value={result ? `${Math.round(result.score * 100)}%` : "—"} label="score" accent={!!result} />
+                <ExportMenu doc={quizDoc()} label="Export quiz" />
               </div>
 
               <div className="mt-5 space-y-4">
@@ -215,7 +281,10 @@ export default function Practice() {
             </div>
           ) : (
             <div className="mt-6 max-w-3xl">
-              <p className="text-sm text-stone-600">Tap a card to flip it.</p>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm text-stone-600">Tap a card to flip it.</p>
+                <ExportMenu doc={cardsDoc()} label="Export cards" />
+              </div>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 {cards.map((c, i) => (
                   <Card key={i} className="min-h-32">

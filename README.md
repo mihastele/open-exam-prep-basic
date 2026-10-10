@@ -32,6 +32,11 @@ optional: the app runs with neither.
   for interactive visual explainers.
 - **Observability** — every LLM call traced in Langfuse (cloud or self-hosted,
   optional).
+- **Take it with you** — every generated answer, quiz, flashcard set, mock, plan
+  and podcast episode can be copied to the clipboard (as plain text or Markdown)
+  or downloaded as Markdown, plain text, Word, PDF, HTML, JSON — plus CSV for
+  quizzes and flashcards, which imports straight into Anki or a spreadsheet. All
+  of it is done in the browser: no extra service, no server round trip.
 
 See [docs/ASTRA_PARITY.md](docs/ASTRA_PARITY.md) for the feature-by-feature
 mapping to the commercial product this project replaces.

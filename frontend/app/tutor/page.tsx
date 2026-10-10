@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, post, upload } from "../../lib/api";
+import { safeName, type ExportDoc } from "../../lib/export";
+import ExportMenu from "../../components/ExportMenu";
 import {
   ArrowUpIcon,
   BookIcon,
@@ -96,6 +98,36 @@ export default function Tutor() {
     () => [...msgs].reverse().find((m) => m.role === "assistant" && m.citations?.length)?.citations ?? [],
     [msgs],
   );
+
+  /** Anything the tutor produced can leave the app: question, answer, provenance. */
+  function tutorDoc(m: Msg, previous: Msg | undefined, index: number): ExportDoc {
+    const question = previous?.role === "user" ? previous.content : "";
+    const pairs: [string, string][] = [["Level", level]];
+    if (question) pairs.push(["Asked", new Date().toLocaleString()]);
+    pairs.push([
+      "Sources",
+      m.citations?.length
+        ? m.citations.map((c) => `doc ${c.document_id} · chunk ${c.chunk_id}`).join(", ")
+        : "general knowledge, no material quoted",
+    ]);
+    if (m.degraded) pairs.push(["Note", "answered from keyword search — embeddings were unavailable"]);
+
+    return {
+      title: question ? question.slice(0, 70) : `Tutor answer ${Math.floor(index / 2) + 1}`,
+      filename: `tutor-${safeName(question.slice(0, 40) || `answer-${index + 1}`)}`,
+      blocks: [
+        { kind: "meta", pairs },
+        ...(question
+          ? ([
+              { kind: "heading", text: "Question", level: 3 },
+              { kind: "paragraph", text: question },
+            ] as ExportDoc["blocks"])
+          : []),
+        { kind: "heading", text: "Answer", level: 3 },
+        { kind: "paragraph", text: m.content },
+      ],
+    };
+  }
 
   async function ask(text: string) {
     const question = text.trim();
@@ -229,9 +261,10 @@ export default function Tutor() {
                           Answered from keyword search — embeddings are unavailable, so citations may be rougher.
                         </p>
                       )}
-                      {!!m.citations?.length && (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {m.citations.map((c) => (
+                      {!m.failed && (
+                        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                          <ExportMenu doc={tutorDoc(m, msgs[i - 1], i)} label="Export" />
+                          {m.citations?.map((c) => (
                             <span
                               key={c.chunk_id}
                               title={c.excerpt}
