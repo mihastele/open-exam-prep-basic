@@ -1,7 +1,22 @@
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+/**
+ * API base URL.
+ *
+ * - Unset in production  -> "" (same origin). What you want when the Next.js
+ *   app and the FastAPI backend share a domain: one Vercel project using
+ *   Vercel Services, or any reverse proxy.
+ * - Set                  -> absolute backend URL, e.g. two separate Vercel
+ *   projects (NEXT_PUBLIC_API_URL=https://oep-api.vercel.app).
+ * - Unset in development -> the local FastAPI server on :8000.
+ *
+ * Only the base URL reaches the browser. The model provider's API key stays in
+ * the backend's server-side env vars and is never sent to the client.
+ */
+export const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "");
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(`${API}${path}`, {
+  const r = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
   });
@@ -21,7 +36,7 @@ export async function upload<T>(path: string, file: File, extra?: Record<string,
   const form = new FormData();
   form.append("file", file);
   for (const [k, v] of Object.entries(extra || {})) form.append(k, v);
-  const r = await fetch(`${API}${path}`, { method: "POST", body: form });
+  const r = await fetch(`${API_BASE}${path}`, { method: "POST", body: form });
   if (!r.ok) throw new Error(`${r.status}: ${(await r.text()).slice(0, 300)}`);
   return r.json() as Promise<T>;
 }

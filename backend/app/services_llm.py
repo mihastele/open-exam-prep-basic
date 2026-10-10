@@ -70,12 +70,12 @@ def embed(texts: list[str]) -> list[list[float]]:
     s = get_settings()
     try:
         r = httpx.post(
-            f"{s.chat_base_url}/embeddings",
+            f"{s.embed_url}/embeddings",
             json={"model": s.embed_model, "input": texts},
-            headers=_headers(),
+            headers={"Authorization": f"Bearer {s.embed_key}"},
             timeout=120.0,
         )
         r.raise_for_status()
         return [d["embedding"] for d in r.json()["data"]]
     except Exception as e:
-        raise LLMUnavailable(f"embeddings unreachable at {s.chat_base_url}: {e}")
+        raise LLMUnavailable(f"embeddings unreachable at {s.embed_url}: {e}")

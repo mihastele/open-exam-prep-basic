@@ -24,12 +24,28 @@ class DocOut(BaseModel):
     chunks: int
 
 
+def _keep_original(upload_dir: str, name: str, data: bytes) -> None:
+    """Best-effort copy of the raw upload.
+
+    The parsed text is already stored as chunks, so a read-only or missing
+    filesystem (serverless) must not fail the ingest.
+    """
+    try:
+        os.makedirs(upload_dir, exist_ok=True)
+        with open(os.path.join(upload_dir, name), "wb") as f:
+            f.write(data)
+    except OSError:
+        pass
+
+
 @router.post("", response_model=DocOut)
 async def ingest(file: UploadFile, title: str = ""):
     s = get_settings()
     data = await file.read()
-    if len(data) > 50 * 1024 * 1024:
-        raise HTTPException(413, "File too large (50 MB max).")
+    if len(data) > s.max_upload_bytes:
+        raise HTTPException(
+            413, f"File too large ({s.max_upload_bytes // (1024 * 1024)} MB max)."
+        )
     try:
         text = extract_text(file.filename or "upload.txt", data)
     except ValueError as e:
@@ -39,15 +55,12 @@ async def ingest(file: UploadFile, title: str = ""):
     if not text.strip():
         raise HTTPException(400, "No readable text found in that file.")
     chunks = rag.chunk_text(text)
-    os.makedirs(s.upload_dir, exist_ok=True)
     db: Session = next(get_session())
     try:
         doc = Document(title=title or (file.filename or "Untitled"), filename=file.filename or "")
         db.add(doc)
         db.flush()
-        path = os.path.join(s.upload_dir, f"{doc.id}_{file.filename or 'upload'}")
-        with open(path, "wb") as f:
-            f.write(data)
+        _keep_original(s.upload_path, f"{doc.id}_{file.filename or 'upload'}", data)
         try:
             vecs = llm.embed(chunks)
         except llm.LLMUnavailable:
@@ -81,7 +94,8 @@ def delete_doc(doc_id: int, db: Session = Depends(get_session)):
         db.delete(c)
     db.delete(doc)
     db.commit()
-    for f in os.listdir(s.upload_dir) if os.path.isdir(s.upload_dir) else []:
+    upload_dir = s.upload_path
+    for f in os.listdir(upload_dir) if os.path.isdir(upload_dir) else []:
         if f.startswith(f"{doc_id}_"):
-            os.remove(os.path.join(s.upload_dir, f))
+            os.remove(os.path.join(upload_dir, f))
     return {"deleted": doc_id}

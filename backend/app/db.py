@@ -2,6 +2,7 @@
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from .config import get_settings
 
@@ -11,9 +12,16 @@ class Base(DeclarativeBase):
 
 
 def _engine():
-    url = get_settings().database_url
+    s = get_settings()
+    url = s.database_url
     if url.startswith("sqlite"):
         return create_engine(url, connect_args={"check_same_thread": False})
+    if s.is_serverless:
+        # Serverless: each invocation is short-lived and many instances run at
+        # once, so a client-side pool just burns the database's connection
+        # limit. Connect per request and let a server-side pooler
+        # (Neon/Supabase -replica URLs) do the pooling.
+        return create_engine(url, poolclass=NullPool)
     return create_engine(url, pool_pre_ping=True)
 
 

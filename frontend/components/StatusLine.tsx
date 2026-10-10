@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { get, type Health } from "../lib/api";
+import { get, API_BASE, type Health } from "../lib/api";
 
 export default function StatusLine() {
   const [h, setH] = useState<Health | null>(null);
@@ -12,8 +12,8 @@ export default function StatusLine() {
   if (err)
     return (
       <p className="rounded-lg border-2 border-ink bg-white px-3 py-2 text-sm">
-        Backend not reachable at :8000 — start it with <code>uv run uvicorn app.main:app --port 8000</code> in
-        backend/.
+        Backend not reachable at <code>{API_BASE || "this origin"}</code> — start it with{" "}
+        <code>uv run uvicorn app.main:app --port 8000</code> in backend/.
       </p>
     );
   if (!h) return <p className="text-sm text-stone-600">Checking backend…</p>;

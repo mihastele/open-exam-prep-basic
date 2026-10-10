@@ -11,6 +11,7 @@ node_modules/
 .next/
 out/
 *.log
+*.tsbuildinfo
 
 # Env / secrets (never commit real keys)
 .env
@@ -27,3 +28,6 @@ backend/data/
 .DS_Store
 .vscode/
 .idea/
+
+# Vercel (local CLI state; never commit a project link or pulled env)
+.vercel/
